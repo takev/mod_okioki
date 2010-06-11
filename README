@@ -6,4 +6,31 @@ Okioki is a Maori word, meaning: to rest.
 This module makes it easy to create a RESTful data service. Simply
 by define urls and SQL statements in the apache configuration file.
 
+Example apache config
+---------------------
+Below is part of an apache configuration file. The first part loads
+the module.
+The Location directive makes the /tautoru url under control of the okioki module.
+- The OkiokiConnectionInfo shows a postgresql connect string.
+- The OkiokiCommand gives http method, a regex url (under /tautoru) and optionally decoded argument names.
+- The OkiokiSQL sets the SQL statement to execute when the command matches, it also optionally
+  allows for named SQL parameters (which are decoded from the url, query string, post parameter and cookies).
+- The OkiokiCSV sets the names (which matches the names in the select clause) of the columns to display.
+
+<IfModule !mod_okioki.c>
+    LoadModule okioki_module modules/mod_okioki.so
+</IfModule>
+
+<Location /tautoru>
+    SetHandler okioki-handler
+    OkiokiConnectionInfo "host=localhost dbname=tautoru user=tautoru password=foobarbaz"
+
+    OkiokiCommand GET ^/test$
+    OkiokiSQL "select id, name from otp_algorithm"
+    OkiokiCSV id name
+
+    OkiokiCommand GET ^/test/([0-9]+)$ id
+    OkiokiSQL "select name from otp_algorithm where id = $1" id
+    OkiokiCSV name
+</Location>
 
