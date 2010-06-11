@@ -3,8 +3,36 @@ mod_okioki - RESTful data service, apache module
 
 Okioki is a Maori word, meaning: to rest. 
 
-This module makes it easy to create a RESTful data service. Simply
-by define urls and SQL statements in the apache configuration file.
+There is a lot of infrastructure build for webservices, such as load balances,
+caching/proxy servers, compression, encryption, authentication, auhtorization and logging.
+By having this Okioki module between the application server and its database as a shim will
+give you access to all this infrastructure. Okioki was designed to make it really easy
+to make such a RESTful data service.
+
+Design constraints for this module are:
+- Correctness, i.e. everything is checked, don't allow sql injection.
+- Performance, the primary reason to make this in C.
+- Simple to use/configure.
+
+Anatomy of a service
+--------------------
+A webservice is identified by the http method and url. In Okioki the url is defined
+with an extended regular expression, with optional groups.
+
+Each of the webservices has an SQL statement associated with it. Parameters used by the
+SQL statement can be gotten from the http client in several ways.
+- The first set of parameters are parsed from the url using its matching regular
+  expression and groups.
+- The second set is parsed from the query string.
+- The third set from the cookies
+- And the last set from the posted urlencoded form data.
+
+The result of the SQL statement is written to the http client in a
+CSV (comman seperated values). The result may also be written to a cookie (only the
+value from the first row of the result).
+
+It is recommended to create stored procedures for the more complicated services.
+
 
 Example apache config
 ---------------------
