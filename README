@@ -1,0 +1,9 @@
+mod_okioki - RESTful data service, apache module
+================================================
+
+Okioki is a Maori word, meaning: to rest. 
+
+This module makes it easy to create a RESTful data service. Simply
+by define urls and SQL statements in the apache configuration file.
+
+
