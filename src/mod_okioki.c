@@ -75,12 +75,12 @@ static void *mod_okioki_create_dir_config(apr_pool_t *pool, char *dir)
 static int mod_okioki_handler(request_rec *http_request)
 {
     apr_pool_t            *pool = http_request->pool;
+    apr_bucket_alloc_t    *alloc = http_request->connection->bucket_alloc;
     mod_okioki_dir_config *cfg;
     view_t                *view;
     apr_hash_t            *arguments;
     apr_array_header_t    *result;
-    char                  *result_s;
-    size_t                result_s_len;
+    apr_bucket_brigade    *bb_out;
     int                   ret;
 
     // Check if we need to process the request. We only need to if the handler is set to "okioki-handler".
@@ -138,26 +138,13 @@ static int mod_okioki_handler(request_rec *http_request)
 
     // Convert result to csv string.
     HTTP_ASSERT_NOT_NULL(
-        result_s = mod_okioki_generate_csv(pool, view, result, &result_s_len),
+        bb_out = mod_okioki_generate_csv(pool, alloc, view, result),
         HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not generate text/csv."
     )
 
-    if (result_s_len > 0) {
-        ap_set_content_type(http_request, "text/csv");
-        ap_set_content_length(http_request, result_s_len);
-
-        HTTP_ASSERT_NOT_NEG(
-            ap_rwrite(result_s, result_s_len, http_request),
-            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Write failed, client closed connection."
-        )
-
-        HTTP_ASSERT_NOT_NEG(
-            ap_rflush(http_request),
-            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Write failed, client closed connection."
-        )
-    }
-
-    return HTTP_OK;
+    ap_set_content_type(http_request, "text/csv");
+    
+    return ap_pass_brigade(http_request->output_filters, bb_out);
 }
 
 /** This function setups all the handlers at startup.
