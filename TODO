@@ -1,0 +1,7 @@
+- Replace input/output with buckets and brigades
+- Replace current database connection pool with apr's version
+- Replace PostgresQL interface with apr's vendor independed version.
+- Add cookie output support
+- Add XML input/output support
+- Add binary input/output support
+- Add non-http connection handler.
