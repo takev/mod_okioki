@@ -5,3 +5,4 @@
 - Add XML input/output support
 - Add binary input/output support
 - Add non-http connection handler.
+- Fix cookie parsing, to handle multiple cookies
