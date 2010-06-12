@@ -20,46 +20,36 @@
 #include <apr_hash.h>
 #include "csv.h"
 
-#define MAX_CSV_LINE_SIZE 256
-
-int mod_okioki_buffer_append(char *buffer, size_t buffer_size, size_t *buffer_length, char *s, int s_length)
-{
-    // If unknown, calculate the length of s.
-    if (s_length == -1) {
-        s_length = strlen(s);
-    }
-
-    // Check if there is enough room in the buffer.
-    if (*buffer_length + s_length > buffer_size) {
-        return HTTP_INTERNAL_SERVER_ERROR;
-    }
-
-    // Copy s into the buffer. We know the length, so no strcpy needed.
-    memcpy(&buffer[*buffer_length], s, s_length);
-    *buffer_length += s_length;
-    return HTTP_OK;
-}
-
-int mod_okioki_buffer_append_value(apr_pool_t *pool, char *buffer, size_t buffer_size, size_t *buffer_length, char *s, int s_length)
+int mod_okioki_buffer_append_value(apr_bucket_brigade *bb, apr_pool_t *pool, apr_bucket_alloc_t *alloc, char *s)
 {
     int i, j;
     int need_quote = 0;
-    int need_escape = 0;
-    char *s2;
     char c;
-    int ret;
+    int s_length = strlen(s);
+    apr_bucket *b;
+    apr_bucket *b_before = APR_BRIGADE_LAST(bb);
 
-    // If the length of s is unknown, calculate it.
-    if (s_length == -1) {
-        s_length = strlen(s);
-    }
-
-    // PASS 1: Check the string for any characters that need to be escaped.
-    for (i = 0; i < s_length; i++) {
+    // Copy the string, and escape quotes.
+    for (j = i = 0; i < s_length; i++) {
         c = s[i];
         switch (c) {
         case '"':
-            need_escape++; // fall tru
+            // Add the text, before and including this quote.
+            HTTP_ASSERT_NOT_NULL(
+                b = apr_bucket_transient_create(&s[j], (i - j) + 1, alloc),
+                HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
+            )
+            APR_BRIGADE_INSERT_TAIL(bb, b);
+
+            // Double the quote.
+            HTTP_ASSERT_NOT_NULL(
+                b = apr_bucket_immortal_create("\"", 1, alloc),
+                HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
+            )
+            APR_BRIGADE_INSERT_TAIL(bb, b);
+
+            // Set j to just after this character.
+            j = i + 1;
         case '\n':
         case '\r':
         case ',':
@@ -67,87 +57,71 @@ int mod_okioki_buffer_append_value(apr_pool_t *pool, char *buffer, size_t buffer
             break;
         }
     }
-
-    // PASS 2: If there was quote we need to escape for each quote.
-    if (need_escape) {
-        // Escaping uses more space, so allocate a new string.
-        s2 = apr_palloc(pool, s_length + need_escape + 1);
-
-        // Copy the string, doubling a quote and ending with a nul.
-        for (j = i = 0; i < (s_length + 1); i++) {
-            c = s[i];
-            s2[j++] = c;
-            if (c == '"') {
-                s2[j++] = c;
-            }
-        }
-
-        // After this we are going to use s like normally.
-        s = s2;
+    if (j < i) {
+        // Add the last piece of text.
+        HTTP_ASSERT_NOT_NULL(
+            b = apr_bucket_transient_create(&s[j], i - j, alloc),
+            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
+        )
+        APR_BRIGADE_INSERT_TAIL(bb, b);
     }
 
-    // Add a quote if the string needed to be quoted.
     if (need_quote) {
-        HTTP_ASSERT_OK(
-            ret = mod_okioki_buffer_append(buffer, buffer_size, buffer_length, "\"", 1),
-            ret, "[mod_okioki] Not enough room to store CSV result."
+        // Add a quote at the end of the value.
+        HTTP_ASSERT_NOT_NULL(
+            b = apr_bucket_immortal_create("\"", 1, alloc),
+            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
         )
-    }
+        APR_BRIGADE_INSERT_TAIL(bb, b);
 
-    // Add the "escaped" string.
-    HTTP_ASSERT_OK(
-        ret = mod_okioki_buffer_append(buffer, buffer_size, buffer_length, s, s_length + need_escape),
-        ret, "[mod_okioki] Not enough room to store CSV result."
-    )
-
-    // Add an other quote if the string needed to be quoted.
-    if (need_quote) {
-        HTTP_ASSERT_OK(
-            ret = mod_okioki_buffer_append(buffer, buffer_size, buffer_length, "\"", 1),
-            ret, "[mod_okioki] Not enough room to store CSV result."
+        // Also add a quote before the value.
+        HTTP_ASSERT_NOT_NULL(
+            b = apr_bucket_immortal_create("\"", 1, alloc),
+            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
         )
+        APR_BUCKET_INSERT_AFTER(b_before, b);
     }
 
     return HTTP_OK;
 }
 
-char *mod_okioki_generate_csv(apr_pool_t *pool, view_t *view, apr_array_header_t *result, size_t *result_s_len)
+apr_bucket_brigade *mod_okioki_generate_csv(apr_pool_t *pool, apr_bucket_alloc_t *alloc, view_t *view, apr_array_header_t *result)
 {
     int i, j;
     char *value;
     apr_hash_t *row;
+    apr_bucket_brigade *bb;
+    apr_bucket *b;
 
-    size_t  buffer_size = (result->nelts + 1) * MAX_CSV_LINE_SIZE;
-    size_t  buffer_length = 0;
-    char    *buffer = apr_palloc(pool, buffer_size);
-
-    *result_s_len = 0;
-
-    if (result == NULL || result->nelts == 0) {
-        return "";
-    }
+    HTTP_ASSERT_NOT_NULL(
+        bb = apr_brigade_create(pool, alloc),
+        NULL, "[mod_okioki] Could not allocate a bucket brigade."
+    )
 
     // Create a csv header.
     for (i = 0; i < view->nr_csv_params; i++) {
         // Add a comma between each entry.
         if (i != 0) {
-            HTTP_ASSERT_OK(
-                mod_okioki_buffer_append(buffer, buffer_size, &buffer_length, ",", 1),
-                NULL, "[mod_okioki] Not enough room to store CSV result."
+            HTTP_ASSERT_NOT_NULL(
+                b = apr_bucket_immortal_create(",", 1, alloc),
+                NULL, "[mod_okioki] Could not allocate bucket."
             )
+            APR_BRIGADE_INSERT_TAIL(bb, b);
         }
 
         // Copy the name of the column.
-        HTTP_ASSERT_OK(
-            mod_okioki_buffer_append_value(pool, buffer, buffer_size, &buffer_length, view->csv_params[i], view->csv_params_len[i]),
-            NULL, "[mod_okioki] Not enough room to store CSV result."
+        HTTP_ASSERT_NOT_NULL(
+            b = apr_bucket_immortal_create(view->csv_params[i], view->csv_params_len[i], alloc),
+            NULL, "[mod_okioki] Could not allocate bucket."
         )
+        APR_BRIGADE_INSERT_TAIL(bb, b);
     }
     // Finish off the header with a carriage return and linefeed.
-    HTTP_ASSERT_OK(
-        mod_okioki_buffer_append(buffer, buffer_size, &buffer_length, "\r\n", 2),
-        NULL, "[mod_okioki] Not enough room to store CSV result."
+    HTTP_ASSERT_NOT_NULL(
+        b = apr_bucket_immortal_create("\r\n", 2, alloc),
+        NULL, "[mod_okioki] Could not allocate bucket."
     )
+    APR_BRIGADE_INSERT_TAIL(bb, b);
 
     // Check each row and figure out all the column names.
     for (j = 0; j < result->nelts; j++) {
@@ -160,10 +134,11 @@ char *mod_okioki_generate_csv(apr_pool_t *pool, view_t *view, apr_array_header_t
         for (i = 0; i < view->nr_csv_params; i++) {
             // Add a comma between each entry.
             if (i != 0) {
-                HTTP_ASSERT_OK(
-                    mod_okioki_buffer_append(buffer, buffer_size, &buffer_length, ",", 1),
-                    NULL, "[mod_okioki] Not enough room to store CSV result."
+                HTTP_ASSERT_NOT_NULL(
+                    b = apr_bucket_immortal_create(",", 1, alloc),
+                    NULL, "[mod_okioki] Could not allocate bucket."
                 )
+                APR_BRIGADE_INSERT_TAIL(bb, b);
             }
 
             HTTP_ASSERT_NOT_NULL(
@@ -171,21 +146,27 @@ char *mod_okioki_generate_csv(apr_pool_t *pool, view_t *view, apr_array_header_t
                 NULL, "[mod_okioki] column '%s' not found in result.", view->csv_params[i]
             )
 
-            // Copy the name of the column.
+            // Copy the value of the column.
             HTTP_ASSERT_OK(
-                mod_okioki_buffer_append_value(pool, buffer, buffer_size, &buffer_length, value, -1),
+                mod_okioki_buffer_append_value(bb, pool, alloc, value),
                 NULL, "[mod_okioki] Not enough room to store CSV result."
             )
         }
 
         // Finish off the header with a carriage return and linefeed.
-        HTTP_ASSERT_OK(
-            mod_okioki_buffer_append(buffer, buffer_size, &buffer_length, "\r\n", 2),
-            NULL, "[mod_okioki] Not enough room to store CSV result."
+        HTTP_ASSERT_NOT_NULL(
+            b = apr_bucket_immortal_create("\r\n", 2, alloc),
+            NULL, "[mod_okioki] Could not allocate bucket."
         )
+        APR_BRIGADE_INSERT_TAIL(bb, b);
     }
 
-    *result_s_len = buffer_length;
-    return buffer;
+    // Add an end-of-stream.
+    HTTP_ASSERT_NOT_NULL(
+        b = apr_bucket_eos_create(alloc),
+        NULL, "[mod_okioki] Could not allocate bucket."
+    )
+    APR_BRIGADE_INSERT_TAIL(bb, b);
+    return bb;
 }
 
