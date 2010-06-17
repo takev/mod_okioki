@@ -55,12 +55,6 @@ static void *mod_okioki_create_dir_config(apr_pool_t *pool, char *dir)
         NULL, "[mod_okioki] Failed to allocate per-directory config."
     )
 
-    // Setup the backend database connection pool.
-    HTTP_ASSERT_OK(
-        mod_okioki_dbconns_init(pool, new_cfg),
-        NULL, "[mod_okioki] Failed to setup database resource pool."
-    )
-
     return (void *)new_cfg;
 }
 
@@ -195,7 +189,8 @@ const char *mod_okioki_dircfg_set_sql(cmd_parms *cmd, void *_conf, const char *a
     }
 
     // Copy the SQL statement.
-    if ((view->sql = apr_pstrndup(cmd->pool, &args[sql_start], sql_end - sql_start)) == NULL) {
+    view->sql_len = sql_end - sql_start;
+    if ((view->sql = apr_pstrndup(cmd->pool, &args[sql_start], view->sql_len)) == NULL) {
         return "[TPApiSQL] could not copy SQL statement.";
     }
 
@@ -322,13 +317,6 @@ static const command_rec mod_okioki_cmds[] = {
         NULL,
         OR_AUTHCFG,
         "OkiokiCSV [<result>[ <result>]...]"
-    ),
-    AP_INIT_TAKE1(
-        "OkiokiConnectionInfo",
-        ap_set_string_slot,
-        (void *)APR_OFFSETOF(mod_okioki_dir_config, connection_info),
-        OR_AUTHCFG,
-        "OkiokiConnectionInfo (string) The database to connect to."
     ),
     {NULL}
 };

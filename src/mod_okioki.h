@@ -41,6 +41,12 @@
         return http_code; \
     }
 
+#define HTTP_ASSERT_ZERO(expr, http_code, msg...) \
+    if (__builtin_expect((expr) != 0, 0)) { \
+        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, msg); \
+        return http_code; \
+    }
+
 
 typedef struct {
     regex_t link;
@@ -49,6 +55,7 @@ typedef struct {
     char    *link_params[MAX_PARAMETERS];
     size_t  link_params_len[MAX_PARAMETERS];
     char    *sql;
+    size_t  sql_len;
     size_t  nr_sql_params;
     char    *sql_params[MAX_PARAMETERS];
     size_t  sql_params_len[MAX_PARAMETERS];
@@ -58,16 +65,9 @@ typedef struct {
 } view_t;
 
 typedef struct {
-    // Database connections pool.
-    struct apr_array_header_t *connections;
-    apr_thread_mutex_t        *connections_mutex;
-    apr_uint32_t              nr_connections;
-    char                      *connection_info;
-
     // Views.
     size_t nr_views;
     view_t views[MAX_VIEWS];
-
 } mod_okioki_dir_config;
 
 #endif

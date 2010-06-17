@@ -20,50 +20,6 @@
 #include <libpq-fe.h>
 #include "mod_okioki.h"
 
-/** Initialize the database part of the per directory config.
- * This initializes the stack, mutex, counter and dbconn info.
- *
- * @param cfg    The per-directory config of this module.
- * @returns      0 on success, -1 on error.
- */
-int mod_okioki_dbconns_init(apr_pool_t *p, mod_okioki_dir_config *cfg);
-
-/** Pop an database dbconn from the stack.
- *
- * @param req    The http request.
- * @param cfg    The per-directory config.
- * @returns      A postrgesql dbconn pointer, NULL on empty or error.
- */
-PGconn *mod_okioki_pop_dbconn(request_rec *http_req, mod_okioki_dir_config *cfg);
-
-/** Push a dbconn back on the stack.
- *
- * @param req      The http request.
- * @param cfg      The per-directory config.
- * @param db_conn  The postrgresql dbconn to put back on the stack.
- * @returns        0 on success, -1 on lock error, -2 on unlock error.
- */
-int mod_okioki_push_dbconn(request_rec *http_req, mod_okioki_dir_config *cfg, PGconn *db_conn);
-
-/** Get a database dbconn.
- * Get a unused database dbconn, this may come from the resource pool or created fresh.
- *
- * @param req    The http request.
- * @param cfg    The per-directory config.
- * @returns      A postrgesql dbconn pointer, NULL on empty or error.
- */
-PGconn *mod_okioki_get_dbconn(request_rec *http_req, mod_okioki_dir_config *cfg);
-
-/** Return a dbconn, back to the resource pool.
- *
- * @param req               The http request.
- * @param cfg               The per-directory config.
- * @param db_conn           The postrgresql dbconn to put back on the stack.
- * @param close_dbconn  1 if the dbconn needs to be closed instead of pushed back on the stack.
- * @returns                 0 on success, <0 on error.
- */
-int mod_okioki_return_dbconn(request_rec *http_req, mod_okioki_dir_config *cfg, PGconn *db_conn, int close_dbconn);
-
 int mod_okioki_execute_view(request_rec *http_request, mod_okioki_dir_config *cfg, view_t *view, apr_hash_t *arguments, apr_array_header_t *result);
 
 #endif
