@@ -35,7 +35,7 @@ int mod_okioki_execute_view(request_rec *http_request, mod_okioki_dir_config *cf
     int                have_result = (view->link_cmd == M_POST) | (view->link_cmd == M_GET);
     char               *arg;
     int                argc = view->nr_sql_params;
-    char               *argv[argc];
+    char               *argv[argc + 1];
     off_t              i;
     const char         *db_value;
     char               *value;
@@ -56,6 +56,9 @@ int mod_okioki_execute_view(request_rec *http_request, mod_okioki_dir_config *cf
 
         argv[i] = arg;
     }
+    argv[i] = NULL;
+
+    ap_log_perror(APLOG_MARK, APLOG_WARNING, 0, pool, "[mod_okioki] test 1.");
 
     // Retrieve a database connection from the resource pool.
     HTTP_ASSERT_NOT_NULL(
@@ -63,38 +66,57 @@ int mod_okioki_execute_view(request_rec *http_request, mod_okioki_dir_config *cf
         HTTP_BAD_GATEWAY, "[mod_okioki] Can not get database connection."
     )
 
+    ap_log_perror(APLOG_MARK, APLOG_WARNING, 0, pool, "[mod_okioki] test 2.");
+
     // Get the prepared statement.
     HTTP_ASSERT_NOT_NULL(
         db_statement = apr_hash_get(db_conn->prepared, view->sql, view->sql_len),
         HTTP_NOT_FOUND, "[mod_okioki] Can not find '%s'", view->sql
     )
 
+    ap_log_perror(APLOG_MARK, APLOG_WARNING, 0, pool, "[mod_okioki] test 3 argc:%i first='%s'.", argc, argv[0]);
+
     // Execute the statement.
     if (have_result) {
+        db_result = NULL;
         HTTP_ASSERT_ZERO(
-            apr_dbd_pselect(db_conn->driver, pool, db_conn->handle, &db_result, db_statement, 1, argc, (const char **)argv),
+            apr_dbd_pselect(db_conn->driver, db_conn->pool, db_conn->handle, &db_result, db_statement, 1, argc, (const char **)argv),
             HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Can not execute select statement."
         )
+        HTTP_ASSERT_NOT_NULL(
+            db_result,
+            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Result was not set by apr_dbd_pselect."
+        )
+
         nr_rows = apr_dbd_num_tuples(db_conn->driver, db_result);
+        //nr_rows = 0;
     } else {
         HTTP_ASSERT_ZERO(
-            apr_dbd_pquery(db_conn->driver, pool, db_conn->handle, &nr_rows, db_statement, argc, (const char **)argv),
+            apr_dbd_pquery(db_conn->driver, db_conn->pool, db_conn->handle, &nr_rows, db_statement, argc, (const char **)argv),
             HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Can not execute query."
         )
     }
+
+    ap_log_perror(APLOG_MARK, APLOG_WARNING, 0, pool, "[mod_okioki] test 4.");
 
     if (nr_rows < 1) {
         return HTTP_NOT_FOUND;
     }
 
+    ap_log_perror(APLOG_MARK, APLOG_WARNING, 0, pool, "[mod_okioki] test 5.");
+
     if (have_result) {
         nr_cols = apr_dbd_num_cols(db_conn->driver, db_result);
         for (row_nr = 0; row_nr < nr_rows; row_nr++) {
+            ap_log_perror(APLOG_MARK, APLOG_WARNING, 0, pool, "[mod_okioki] test 6.");
+
             // Create a new hash table row.
             HTTP_ASSERT_NOT_NULL(
                 row = apr_hash_make(pool),
                 HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Can not allocate hash table for row."
             )
+
+            ap_log_perror(APLOG_MARK, APLOG_WARNING, 0, pool, "[mod_okioki] test 7.");
 
             // Add the empty row to the result, we fill in the row afterwards.
             HTTP_ASSERT_NOT_NULL(
@@ -103,11 +125,16 @@ int mod_okioki_execute_view(request_rec *http_request, mod_okioki_dir_config *cf
             )
             *row_item = row;
 
+            ap_log_perror(APLOG_MARK, APLOG_WARNING, 0, pool, "[mod_okioki] test 8.");
+
             // Retrieve a row from the result.
+            db_row = NULL;
             HTTP_ASSERT_ZERO(
-                apr_dbd_get_row(db_conn->driver, pool, db_result, &db_row, row_nr),
+                apr_dbd_get_row(db_conn->driver, pool, db_result, &db_row, row_nr + 1),
                 HTTP_BAD_GATEWAY, "[mod_okioki] Failed to retrieve row from select."
             )
+
+            ap_log_perror(APLOG_MARK, APLOG_WARNING, 0, pool, "[mod_okioki] test 9.");
 
             // Add the columns to the row.
             for (col_nr = 0; col_nr < nr_cols; col_nr++) {
@@ -126,8 +153,12 @@ int mod_okioki_execute_view(request_rec *http_request, mod_okioki_dir_config *cf
                 // Add value to resul.t
                 apr_hash_set(row, apr_dbd_get_name(db_conn->driver, db_result, col_nr), APR_HASH_KEY_STRING, value);
             }
+            ap_log_perror(APLOG_MARK, APLOG_WARNING, 0, pool, "[mod_okioki] test 10.");
+
         }
     }
+
+    ap_log_perror(APLOG_MARK, APLOG_WARNING, 0, pool, "[mod_okioki] test 11.");
 
     return HTTP_OK;
 }
