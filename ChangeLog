@@ -1,8 +1,9 @@
 
 2010-06-19 Take Vos <take.vos@vosgames.nl>
 
-* Replaced postgresql with mod_dbd
+* Replaced postgresql with mod_dbd.
 
-* Replaced regex with mod_rewrite
+* Replaced regex with mod_rewrite.
 
+* Updates all asserts to more sane names.
 

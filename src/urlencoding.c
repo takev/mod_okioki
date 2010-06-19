@@ -69,13 +69,13 @@ int mod_okioki_parse_query_phrase(request_rec *http_req, apr_hash_t *arguments, 
     char *value;
 
     // Get the name by looking for a '=' character
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         name = apr_strtok(s, "=", &last),
         HTTP_BAD_REQUEST, "[mod_okioki] Failed to get name from query phrase."
     )
 
     // Get the value, which is the rest, the '&' and ';' do not exist, so this runs till the end.
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         value = apr_strtok(NULL, "&;", &last),
         HTTP_BAD_REQUEST, "[mod_okioki] Failed to get value from query phrase."
     )
@@ -109,7 +109,7 @@ int mod_okioki_parse_query(request_rec *http_req, apr_hash_t *arguments, char *_
     }
 
     // Copy the query string, as we will modify it, and we will add it to the hash table.
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         s = apr_pstrdup(pool, _s),
         HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Failed to copy query '%s'.", _s
     )
@@ -118,7 +118,7 @@ int mod_okioki_parse_query(request_rec *http_req, apr_hash_t *arguments, char *_
     phrase = apr_strtok(s, "&;", &last);
     while (phrase) {
         // Parse the phrase.
-        HTTP_ASSERT_OK(
+        ASSERT_HTTP_OK(
             ret = mod_okioki_parse_query_phrase(http_req, arguments, phrase),
             ret, "[mod_okioki] Could not parse query."
         )
@@ -144,7 +144,7 @@ int mod_okioki_parse_posted_query(request_rec *http_req, apr_hash_t *arguments)
     }
 
     // Check for the content-type of the request.
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         content_type = apr_table_get(http_req->headers_in, "Content-type"),
         HTTP_BAD_REQUEST, "[mod_okioki.c] No content-type for PUT or POST."
     )
@@ -164,7 +164,7 @@ int mod_okioki_parse_posted_query(request_rec *http_req, apr_hash_t *arguments)
         return HTTP_BAD_REQUEST;
     }
 
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         buffer = apr_palloc(http_req->pool, todo + 1),
         HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate input buffer of size %i.", (int)todo
     )

@@ -42,7 +42,7 @@ int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cf
 
     // Copy the pointers parameters in the right order for the SQL statement.
     for (i = 0; i < argc; i++) {
-        HTTP_ASSERT_NOT_NULL(
+        ASSERT_NOT_NULL(
             arg = (char *)apr_hash_get(arguments, view->sql_params[i], view->sql_params_len[i]),
             HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not find parameter '%s' in request.", view->sql_params[i]
         )
@@ -52,14 +52,14 @@ int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cf
     argv[i] = NULL;
 
     // Retrieve a database connection from the resource pool.
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         db_conn = ap_dbd_acquire(http_request),
         HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Can not get database connection."
     )
     *db_driver = db_conn->driver;
 
     // Get the prepared statement.
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         db_statement = apr_hash_get((db_conn)->prepared, view->sql, view->sql_len),
         HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Can not find '%s'", view->sql
     )
@@ -71,16 +71,16 @@ int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cf
         // of columns and the name of the columns are known when random access is enabled.
         // Also because we use buckets and brigades everything is done in memory already, so streaming data would not
         // have worked anyway.
-        HTTP_ASSERT_ZERO(
+        ASSERT_APR_SUCCESS(
             apr_dbd_pselect(db_conn->driver, db_conn->pool, db_conn->handle, db_result, db_statement, 1, argc, (const char **)argv),
             HTTP_BAD_GATEWAY, "[mod_okioki] Can not execute select statement."
         )
-        HTTP_ASSERT_NOT_NULL(
+        ASSERT_NOT_NULL(
             *db_result,
             HTTP_BAD_GATEWAY, "[mod_okioki] Result was not set by apr_dbd_pselect."
         )
     } else {
-        HTTP_ASSERT_ZERO(
+        ASSERT_APR_SUCCESS(
             apr_dbd_pquery(db_conn->driver, db_conn->pool, db_conn->handle, &nr_rows, db_statement, argc, (const char **)argv),
             HTTP_BAD_GATEWAY, "[mod_okioki] Can not execute query."
         )

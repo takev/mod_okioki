@@ -36,14 +36,14 @@ int mod_okioki_buffer_append_value(apr_bucket_brigade *bb, apr_pool_t *pool, apr
         switch (c) {
         case '"':
             // Add the text, before and including this quote.
-            HTTP_ASSERT_NOT_NULL(
+            ASSERT_NOT_NULL(
                 b = apr_bucket_transient_create(&s[j], (i - j) + 1, alloc),
                 HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
             )
             APR_BRIGADE_INSERT_TAIL(bb, b);
 
             // Double the quote.
-            HTTP_ASSERT_NOT_NULL(
+            ASSERT_NOT_NULL(
                 b = apr_bucket_immortal_create("\"", 1, alloc),
                 HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
             )
@@ -60,7 +60,7 @@ int mod_okioki_buffer_append_value(apr_bucket_brigade *bb, apr_pool_t *pool, apr
     }
     if (j < i) {
         // Add the last piece of text.
-        HTTP_ASSERT_NOT_NULL(
+        ASSERT_NOT_NULL(
             b = apr_bucket_transient_create(&s[j], i - j, alloc),
             HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
         )
@@ -69,14 +69,14 @@ int mod_okioki_buffer_append_value(apr_bucket_brigade *bb, apr_pool_t *pool, apr
 
     if (need_quote) {
         // Add a quote at the end of the value.
-        HTTP_ASSERT_NOT_NULL(
+        ASSERT_NOT_NULL(
             b = apr_bucket_immortal_create("\"", 1, alloc),
             HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
         )
         APR_BRIGADE_INSERT_TAIL(bb, b);
 
         // Also add a quote before the value.
-        HTTP_ASSERT_NOT_NULL(
+        ASSERT_NOT_NULL(
             b = apr_bucket_immortal_create("\"", 1, alloc),
             HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
         )
@@ -98,7 +98,7 @@ apr_bucket_brigade *mod_okioki_generate_csv(apr_pool_t *pool, apr_bucket_alloc_t
     int row_nr;
     int nr_rows;
 
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         bb = apr_brigade_create(pool, alloc),
         NULL, "[mod_okioki] Could not allocate a bucket brigade."
     )
@@ -110,26 +110,26 @@ apr_bucket_brigade *mod_okioki_generate_csv(apr_pool_t *pool, apr_bucket_alloc_t
     for (col_nr = 0; col_nr < nr_cols; col_nr++) {
         // Add a comma between each entry.
         if (col_nr != 0) {
-            HTTP_ASSERT_NOT_NULL(
+            ASSERT_NOT_NULL(
                 b = apr_bucket_immortal_create(",", 1, alloc),
                 NULL, "[mod_okioki] Could not allocate bucket."
             )
             APR_BRIGADE_INSERT_TAIL(bb, b);
         }
 
-        HTTP_ASSERT_NOT_NULL(
+        ASSERT_NOT_NULL(
             name = apr_dbd_get_name(db_driver, db_result, col_nr),
             NULL, "[mod_okioki] Could not retrieve name of column from database result."
         )
 
-        HTTP_ASSERT_OK(
+        ASSERT_HTTP_OK(
             mod_okioki_buffer_append_value(bb, pool, alloc, name),
             NULL, "[mod_okioki] Not enough room to store CSV result."
         )
     }
 
     // Finish off the header with a carriage return and linefeed.
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         b = apr_bucket_immortal_create("\r\n", 2, alloc),
         NULL, "[mod_okioki] Could not allocate bucket."
     )
@@ -138,11 +138,11 @@ apr_bucket_brigade *mod_okioki_generate_csv(apr_pool_t *pool, apr_bucket_alloc_t
     // Check each row and figure out all the column names.
     db_row = NULL;
     for (row_nr = 0; row_nr < nr_rows; row_nr++) {
-        HTTP_ASSERT_ZERO(
+        ASSERT_APR_SUCCESS(
             apr_dbd_get_row(db_driver, pool, db_result, &db_row, -1),
             NULL, "[mod_okioki] Could not get row"
         )
-        HTTP_ASSERT_NOT_NULL(
+        ASSERT_NOT_NULL(
             db_row,
             NULL, "[mod_okioki] Could not retrieve row."
         )
@@ -150,26 +150,26 @@ apr_bucket_brigade *mod_okioki_generate_csv(apr_pool_t *pool, apr_bucket_alloc_t
         for (col_nr = 0; col_nr < nr_cols; col_nr++) {
             // Add a comma between each entry.
             if (col_nr != 0) {
-                HTTP_ASSERT_NOT_NULL(
+                ASSERT_NOT_NULL(
                     b = apr_bucket_immortal_create(",", 1, alloc),
                     NULL, "[mod_okioki] Could not allocate bucket."
                 )
                 APR_BRIGADE_INSERT_TAIL(bb, b);
             }
 
-            HTTP_ASSERT_NOT_NULL(
+            ASSERT_NOT_NULL(
                 value = apr_dbd_get_entry(db_driver, db_row, col_nr),
                 NULL, "[mod_okioki] Could not retrieve name of column from database result."
             )
 
-            HTTP_ASSERT_OK(
+            ASSERT_HTTP_OK(
                 mod_okioki_buffer_append_value(bb, pool, alloc, value),
                 NULL, "[mod_okioki] Not enough room to store CSV result."
             )
         }
 
         // Finish off the row with a carriage return and linefeed.
-        HTTP_ASSERT_NOT_NULL(
+        ASSERT_NOT_NULL(
             b = apr_bucket_immortal_create("\r\n", 2, alloc),
             NULL, "[mod_okioki] Could not allocate bucket."
         )
@@ -177,7 +177,7 @@ apr_bucket_brigade *mod_okioki_generate_csv(apr_pool_t *pool, apr_bucket_alloc_t
     }
 
     // Add an end-of-stream.
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         b = apr_bucket_eos_create(alloc),
         NULL, "[mod_okioki] Could not allocate bucket."
     )

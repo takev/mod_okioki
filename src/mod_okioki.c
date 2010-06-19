@@ -49,12 +49,12 @@ static void *mod_okioki_create_dir_config(apr_pool_t *pool, char *dir)
     mod_okioki_dir_config *new_cfg;
 
     // Allocate structure.
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         new_cfg = (mod_okioki_dir_config *)apr_pcalloc(pool, sizeof (mod_okioki_dir_config)),
         NULL, "[mod_okioki] Failed to allocate per-directory config."
     )
 
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         new_cfg->views = apr_hash_make(pool),
         NULL, "[mod_okioki] Failed to allocate views hash table."
     )
@@ -89,50 +89,50 @@ static int mod_okioki_handler(request_rec *http_request)
     }
 
     // Retrieve the per-directory configuration for this request.
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         cfg = (mod_okioki_dir_config *)ap_get_module_config(http_request->per_dir_config, &okioki_module),
         HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not get the per-directory config."
     )
 
     // Create hash table.
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         arguments = apr_hash_make(pool),
         HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Failed to allocate argument table."
     )
 
     // Find a view matching the url.
-    HTTP_ASSERT_NOT_NULL(
+    ASSERT_NOT_NULL(
         view = apr_hash_get(cfg->views, http_request->path_info, APR_HASH_KEY_STRING),
         HTTP_NOT_FOUND, "[mod_okioki] Could not find view for '%s'.", http_request->path_info
     )
 
     // Extract cookies from request.
-    HTTP_ASSERT_OK(
+    ASSERT_HTTP_OK(
         ret = mod_okioki_get_cookies(http_request, arguments),
         ret, "[mod_okioki] Could not parse http-cookies."
     )
 
     // Extract parameters from the query string.
-    HTTP_ASSERT_OK(
+    ASSERT_HTTP_OK(
         ret = mod_okioki_parse_query(http_request, arguments, http_request->args),
         ret, "[mod_okioki] Could not parse url-query."
     )
 
     // Extract parameters from the POST/PUT data.
-    HTTP_ASSERT_OK(
+    ASSERT_HTTP_OK(
         ret = mod_okioki_parse_posted_query(http_request, arguments),
         ret, "[mod_okioki] Could not parse posted-query."
     )
 
     // Handle the view.
-    HTTP_ASSERT_OK(
+    ASSERT_HTTP_OK(
         ret = mod_okioki_view_execute(http_request, cfg, view, arguments, &db_driver, &db_result),
         ret, "[mod_okioki] Could not execute view"
     )
 
     // Convert result to csv string.
     if (db_result != NULL) {
-        HTTP_ASSERT_NOT_NULL(
+        ASSERT_NOT_NULL(
             bb_out = mod_okioki_generate_csv(bucket_pool, bucket_alloc, view, db_driver, db_result),
             HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not generate text/csv."
         )
