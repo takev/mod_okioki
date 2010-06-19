@@ -119,10 +119,22 @@ static int mod_okioki_handler(request_rec *http_request)
     )
 
     // Extract parameters from the POST/PUT data.
-    ASSERT_HTTP_OK(
-        ret = mod_okioki_parse_posted_query(http_request, arguments),
-        ret, "[mod_okioki] Could not parse posted-query."
-    )
+    if (request->method_number == M_POST | request->method_number == M_PUT) {
+        ASSERT_NOT_NULL(
+            bb = apr_brigade_create(bucket_pool, bucket_alloc),
+            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not create brigade for input."
+        )
+
+        ASSERT_APR_SUCCESS(
+            ap_get_brigade(http_request->input_filters, bb, AP_MODE_BLOCKING, APR_BLOCK_READ, http_request->input_length),
+            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not get input brigade from request."
+        )
+
+        ASSERT_HTTP_OK(
+            ret = mod_okioki_parse_posted_query(pool, bucket_pool, bucket_alloc, bb, arguments),
+            ret, "[mod_okioki] Could not parse posted-query."
+        )
+    }
 
     // Handle the view.
     ASSERT_HTTP_OK(
