@@ -18,7 +18,7 @@
  */
 
 #include <apr.h>
-#include <regex.h>
+#include <apr_hash.h>
 
 #define MAX_PARAMETERS 32
 #define MAX_VIEWS 200
@@ -52,8 +52,6 @@
 #define O_COOKIE   2
 
 typedef struct {
-    char    *link;
-    size_t  link_len;
     int     link_cmd;
     char    *sql;
     size_t  sql_len;
@@ -65,8 +63,7 @@ typedef struct {
 
 typedef struct {
     // Views.
-    size_t nr_views;
-    view_t views[MAX_VIEWS];
+    apr_hash_t *views;
 } mod_okioki_dir_config;
 
 #endif

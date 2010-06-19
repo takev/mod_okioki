@@ -2,7 +2,7 @@
 
 # Required initializer
 AC_PREREQ(2.61)
-AC_INIT([mod_tdbapi], [0.0.1], [take.vos@vosgames.nl])
+AC_INIT([mod_tdbapi], [0.2], [take.vos@vosgames.nl])
 AC_CONFIG_HEADER([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -14,8 +14,6 @@ AC_PROG_CC
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 AM_MISSING_PROG([GPERF], [gperf])
-
-AX_LIB_POSTGRESQL
 
 AP_VERSION=2.0.0
 AP_CHECK_APACHE([$AP_VERSION], [

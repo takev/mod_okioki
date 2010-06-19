@@ -38,27 +38,37 @@ Example apache config
 ---------------------
 Below is part of an apache configuration file. The first part loads
 the module.
-The Location directive makes the /tautoru url under control of the okioki module.
-- The OkiokiConnectionInfo shows a postgresql connect string.
-- The OkiokiCommand gives http method, a regex url (under /tautoru) and optionally decoded argument names.
-- The OkiokiSQL sets the SQL statement to execute when the command matches, it also optionally
-  allows for named SQL parameters (which are decoded from the url, query string, post parameter and cookies).
-- The OkiokiCSV sets the names (which matches the names in the select clause) of the columns to display.
+
+- Use of DBD commands to prepare the sql statements and use a resource pool
+- Use of the Rewrite engine to convert RESTful URLs to simple urls.
+- The OkiokiCommand has assigned to it:
+ * a http method,
+ * an url (under /tautoru),
+ * That the result should be returned in CSV form,
+ * the prepared statement to use,
+ * and the parameters from a GET/POST form, to be used with the prepared statement
 
 <IfModule !mod_okioki.c>
     LoadModule okioki_module modules/mod_okioki.so
 </IfModule>
 
-<Location /tautoru>
-    SetHandler okioki-handler
-    OkiokiConnectionInfo "host=localhost dbname=tautoru user=tautoru password=foobarbaz"
+<VirtualHost *:80>
+    DBDriver pgsql
+    DBDParams "host=localhost dbname=tautoru user=tautoru password=xxxxxx"
 
-    OkiokiCommand GET ^/test$
-    OkiokiSQL "select id, name from otp_algorithm"
-    OkiokiCSV id name
+    DBDPrepareSQL "select id, name from otp_algorithm;" sql_test
+    DBDPrepareSQL "select name from otp_algorithm where id = %hhd;" sql_test_id
 
-    OkiokiCommand GET ^/test/([0-9]+)$ id
-    OkiokiSQL "select name from otp_algorithm where id = $1" id
-    OkiokiCSV name
-</Location>
+    #RewriteLog "/var/log/apache2/rewrite.log"
+    #RewriteLogLevel 9
+
+    RewriteEngine on
+    RewriteRule ^/tautoru/test/(.*) /tautoru/test_id?id=$1
+
+    <Location /tautoru>
+        SetHandler okioki-handler
+        OkiokiCommand GET /test CSV sql_test
+        OkiokiCommand GET /test_id CSV sql_test_id id
+    </Location>
+</VirtualHost>
 

@@ -38,7 +38,6 @@ subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ap_check_apache.m4 \
-	$(top_srcdir)/m4/ax_lib_postgresql.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
 	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/configure.ac
@@ -167,10 +166,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PG_CONFIG = @PG_CONFIG@
-POSTGRESQL_CFLAGS = @POSTGRESQL_CFLAGS@
-POSTGRESQL_LDFLAGS = @POSTGRESQL_LDFLAGS@
-POSTGRESQL_VERSION = @POSTGRESQL_VERSION@
 RANLIB = @RANLIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
@@ -232,8 +227,8 @@ top_srcdir = @top_srcdir@
 moddir = ${AP_LIBEXECDIR}
 mod_LTLIBRARIES = mod_okioki.la
 mod_okioki_la_SOURCES = mod_okioki.c views.c cookies.c urlencoding.c csv.c
-mod_okioki_la_CFLAGS = -Wall ${MODULE_CFLAGS} ${POSTGRESQL_CFLAGS}
-mod_okioki_la_LDFLAGS = -avoid-version -module ${MODULE_LDFLAGS} ${POSTGRESQL_LDFLAGS}
+mod_okioki_la_CFLAGS = -Wall ${MODULE_CFLAGS}
+mod_okioki_la_LDFLAGS = -avoid-version -module ${MODULE_LDFLAGS}
 all: all-am
 
 .SUFFIXES:

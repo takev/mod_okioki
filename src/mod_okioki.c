@@ -54,6 +54,11 @@ static void *mod_okioki_create_dir_config(apr_pool_t *pool, char *dir)
         NULL, "[mod_okioki] Failed to allocate per-directory config."
     )
 
+    HTTP_ASSERT_NOT_NULL(
+        new_cfg->views = apr_hash_make(pool),
+        NULL, "[mod_okioki] Failed to allocate views hash table."
+    )
+
     return (void *)new_cfg;
 }
 
@@ -97,7 +102,7 @@ static int mod_okioki_handler(request_rec *http_request)
 
     // Find a view matching the url.
     HTTP_ASSERT_NOT_NULL(
-        view = mod_okioki_view_lookup(cfg, http_request),
+        view = apr_hash_get(cfg->views, http_request->path_info, APR_HASH_KEY_STRING),
         HTTP_NOT_FOUND, "[mod_okioki] Could not find view for '%s'.", http_request->path_info
     )
 
@@ -151,17 +156,30 @@ static void mod_okioki_register_hooks(apr_pool_t *pool)
  */
 const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc, char *const argv[])
 {
-    apr_pool_t            *pool   = cmd->pool;
-    mod_okioki_dir_config *conf   = (mod_okioki_dir_config *)_conf;
-    off_t                 view_nr = conf->nr_views++;
-    view_t                *view   = &conf->views[view_nr];
+    apr_pool_t            *pool      = cmd->pool;
+    mod_okioki_dir_config *conf      = (mod_okioki_dir_config *)_conf;
+    view_t                *view;
     unsigned int          i;
     char                  *param;
+    char                  *link;
 
     // Make sure this configuration directive has at least two arguments.
     if (argc < 4) {
         return "[OkiokiSetCommand] Requires at least four arguments.";
     }
+
+    // Create a new view.
+    if ((view = (view_t *)apr_pcalloc(pool, sizeof (view_t))) == NULL) {
+        return "[OkiokiSetCommand] Could not allocate view.";
+    }
+
+    // Copy the link, as the hash table remembers only a reference.
+    if ((link = apr_pstrdup(pool, argv[1])) == NULL) {
+        return "[OkiokiSetCommand] Could not copy link.";
+    }
+
+    // Add the view to the hash table.
+    apr_hash_set(conf->views, link, APR_HASH_KEY_STRING, view);
 
     // Decode the command.
     if (strcmp(argv[0], "GET") == 0) {
@@ -175,12 +193,6 @@ const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc,
     } else {
         return "[OkiokiSetCommand] First argument must be GET, POST, PUT or DELETE";
     }
-
-    // Copy the link.
-    if ((view->link = apr_pstrdup(pool, argv[1])) == NULL) {
-        return "[OkiokiSetCommand] Failed to copy second argument.";
-    }
-    view->link_len = strlen(view->link);
 
     if (strcmp(argv[2], "CSV") == 0) {
         view->output_type = O_CSV;
@@ -199,7 +211,7 @@ const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc,
     view->nr_sql_params = 0;
     for (i = 0; i < MAX_PARAMETERS; i++) {
         if (i < argc - 4) {
-            if ((param = apr_pstrdup(cmd->pool, argv[i + 4])) == NULL) {
+            if ((param = apr_pstrdup(pool, argv[i + 4])) == NULL) {
                 return "[OkiokiSetCommand] Failed to copy sql parameter.";
             }
 

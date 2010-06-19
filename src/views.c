@@ -93,24 +93,3 @@ int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cf
 }
 
 
-view_t *mod_okioki_view_lookup(mod_okioki_dir_config *cfg, request_rec *http_req)
-{
-    off_t      view_nr;
-    view_t     *view;
-
-    // Walk through each configured url.
-    for (view_nr = 0; view_nr < cfg->nr_views; view_nr++) {
-        view = &cfg->views[view_nr];
-
-        // Test the path info against the url.
-        if (view->link_cmd == http_req->method_number && strcmp(view->link, http_req->path_info) == 0) {
-            // Found the url with the current regex, jump forward to extract the arguments.
-            return view;
-        }
-    }
-
-    // The path_info did not match any of the configured urls.
-    return NULL;
-}
-
-

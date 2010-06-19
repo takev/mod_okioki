@@ -1,4 +1,14 @@
 *~
+*.o
+*.lo
+*.la
+*.log
+*.status
+config.h
+stamp-h1
+Makefile
+.deps
+.libs
 aclocal.m4
 config.guess
 config.h.in
@@ -6,6 +16,7 @@ config.sub
 depcomp
 install-sh
 ltmain.sh
+libtool
 missing
 autom4te.cache/
 m4/libtool.m4

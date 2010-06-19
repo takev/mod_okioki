@@ -1,0 +1,8 @@
+
+2010-06-19 Take Vos <take.vos@vosgames.nl>
+
+* Replaced postgresql with mod_dbd
+
+* Replaced regex with mod_rewrite
+
+
