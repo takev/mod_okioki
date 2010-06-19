@@ -22,6 +22,7 @@
 
 #define MAX_PARAMETERS 32
 #define MAX_VIEWS 200
+#define MAX_ROWS 1024
 
 #define HTTP_ASSERT_NOT_NULL(expr, http_code, msg...) \
     if (__builtin_expect((expr) == NULL, 0)) { \
@@ -47,21 +48,19 @@
         return http_code; \
     }
 
+#define O_CSV      1
+#define O_COOKIE   2
 
 typedef struct {
-    regex_t link;
+    char    *link;
+    size_t  link_len;
     int     link_cmd;
-    size_t  nr_link_params;
-    char    *link_params[MAX_PARAMETERS];
-    size_t  link_params_len[MAX_PARAMETERS];
     char    *sql;
     size_t  sql_len;
     size_t  nr_sql_params;
     char    *sql_params[MAX_PARAMETERS];
     size_t  sql_params_len[MAX_PARAMETERS];
-    size_t  nr_csv_params;
-    char    *csv_params[MAX_PARAMETERS];
-    size_t  csv_params_len[MAX_PARAMETERS];
+    int     output_type;
 } view_t;
 
 typedef struct {

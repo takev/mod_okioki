@@ -76,7 +76,7 @@ int mod_okioki_parse_query_phrase(request_rec *http_req, apr_hash_t *arguments, 
 
     // Get the value, which is the rest, the '&' and ';' do not exist, so this runs till the end.
     HTTP_ASSERT_NOT_NULL(
-        value = apr_strtok(s, "&;", &last),
+        value = apr_strtok(NULL, "&;", &last),
         HTTP_BAD_REQUEST, "[mod_okioki] Failed to get value from query phrase."
     )
 
@@ -88,8 +88,9 @@ int mod_okioki_parse_query_phrase(request_rec *http_req, apr_hash_t *arguments, 
     apr_collapse_spaces(name, name);
     apr_collapse_spaces(value, value);
 
+
     // name and value is already newly allocated by duplication of value.
-    apr_hash_set(arguments, name, strlen(name), value);
+    apr_hash_set(arguments, name, APR_HASH_KEY_STRING, value);
 
     return HTTP_OK;
 }

@@ -22,6 +22,6 @@
 #include <apr_tables.h>
 #include "mod_okioki.h"
 
-apr_bucket_brigade *mod_okioki_generate_csv(apr_pool_t *pool, apr_bucket_alloc_t *alloc, view_t *view, apr_array_header_t *result);
+apr_bucket_brigade *mod_okioki_generate_csv(apr_pool_t *pool, apr_bucket_alloc_t *alloc, view_t *view, const apr_dbd_driver_t *db_driver, apr_dbd_results_t *db_result);
 
 #endif

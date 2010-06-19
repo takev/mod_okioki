@@ -30,7 +30,6 @@
 #include <libpq-fe.h>
 #include "mod_okioki.h"
 #include "views.h"
-#include "dbconns.h"
 #include "cookies.h"
 #include "urlencoding.h"
 #include "csv.h"
@@ -68,14 +67,16 @@ static void *mod_okioki_create_dir_config(apr_pool_t *pool, char *dir)
  */
 static int mod_okioki_handler(request_rec *http_request)
 {
-    apr_pool_t            *pool = http_request->pool;
-    apr_bucket_alloc_t    *alloc = http_request->connection->bucket_alloc;
-    mod_okioki_dir_config *cfg;
-    view_t                *view;
-    apr_hash_t            *arguments;
-    apr_array_header_t    *result;
-    apr_bucket_brigade    *bb_out;
-    int                   ret;
+    apr_pool_t              *pool = http_request->pool;
+    apr_pool_t              *bucket_pool = http_request->connection->pool;
+    apr_bucket_alloc_t      *bucket_alloc = http_request->connection->bucket_alloc;
+    mod_okioki_dir_config   *cfg;
+    view_t                  *view;
+    apr_hash_t              *arguments;
+    apr_bucket_brigade      *bb_out;
+    int                     ret;
+    const apr_dbd_driver_t  *db_driver;
+    apr_dbd_results_t       *db_result;
 
     // Check if we need to process the request. We only need to if the handler is set to "okioki-handler".
     if (http_request->handler == NULL || (strcmp(http_request->handler, "okioki-handler") != 0)) {
@@ -94,15 +95,9 @@ static int mod_okioki_handler(request_rec *http_request)
         HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Failed to allocate argument table."
     )
 
-    // Create the result.
-    HTTP_ASSERT_NOT_NULL(
-        result = apr_array_make(pool, 0, sizeof (apr_hash_t *)),
-        HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Failed to allocate result table."
-    )
-
     // Find a view matching the url.
     HTTP_ASSERT_NOT_NULL(
-        view = mod_okioki_view_lookup(cfg, http_request, arguments),
+        view = mod_okioki_view_lookup(cfg, http_request),
         HTTP_NOT_FOUND, "[mod_okioki] Could not find view for '%s'.", http_request->path_info
     )
 
@@ -126,19 +121,21 @@ static int mod_okioki_handler(request_rec *http_request)
 
     // Handle the view.
     HTTP_ASSERT_OK(
-        ret = mod_okioki_execute_view(http_request, cfg, view, arguments, result),
+        ret = mod_okioki_view_execute(http_request, cfg, view, arguments, &db_driver, &db_result),
         ret, "[mod_okioki] Could not execute view"
     )
 
     // Convert result to csv string.
-    HTTP_ASSERT_NOT_NULL(
-        bb_out = mod_okioki_generate_csv(pool, alloc, view, result),
-        HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not generate text/csv."
-    )
+    if (db_result != NULL) {
+        HTTP_ASSERT_NOT_NULL(
+            bb_out = mod_okioki_generate_csv(bucket_pool, bucket_alloc, view, db_driver, db_result),
+            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not generate text/csv."
+        )
+        ap_set_content_type(http_request, "text/csv");
+        return ap_pass_brigade(http_request->output_filters, bb_out);
+    }
 
-    ap_set_content_type(http_request, "text/csv");
-    
-    return ap_pass_brigade(http_request->output_filters, bb_out);
+    return HTTP_OK;    
 }
 
 /** This function setups all the handlers at startup.
@@ -150,85 +147,20 @@ static void mod_okioki_register_hooks(apr_pool_t *pool)
     ap_hook_handler(mod_okioki_handler, NULL, NULL, APR_HOOK_LAST);
 }
 
-/** Process the OkiokiSQL configuration directive.
- */
-const char *mod_okioki_dircfg_set_sql(cmd_parms *cmd, void *_conf, const char *args)
-{
-    mod_okioki_dir_config *conf   = (mod_okioki_dir_config *)_conf;
-    off_t                 view_nr = conf->nr_views - 1;
-    view_t                *view   = &conf->views[view_nr];
-    size_t                args_length = strlen(args);
-    off_t                 sql_start = 0;
-    off_t                 sql_end = 0;
-    off_t                 params_start = 0;
-    off_t                 i = 0;
-    char                  **argv;
-
-    // Skip over leading spaces and quotes.
-    for (i = 0; i < args_length; i++) {
-        char c = args[i];
-        if ((c != '"') & (c != ' ')) {
-            sql_start = i;
-            break;
-        }
-    }
-    if (sql_start == 0) {
-        return "[TPApiSQL] expecting a leading quote character before SQL statement";
-    }
-
-    // Find the last quote.
-    for (i = args_length - 1; i >= sql_start; i--) {
-        if (args[i] == '"') {
-            sql_end = i;
-            params_start = i + 1;
-            break;
-        }
-    }
-    if (sql_end == 0) {
-        return "[TPApiSQL] expecting a trailing quote after SQL statement.";
-    }
-
-    // Copy the SQL statement.
-    view->sql_len = sql_end - sql_start;
-    if ((view->sql = apr_pstrndup(cmd->pool, &args[sql_start], view->sql_len)) == NULL) {
-        return "[TPApiSQL] could not copy SQL statement.";
-    }
-
-    i = 0;
-    view->nr_sql_params = 0;
-    if (params_start < args_length) {
-        // Convert arguments in seperate tokens.
-        if (apr_tokenize_to_argv(&args[params_start], &argv, cmd->pool) != 0) {
-            return "[TPApiSQL] could not tokenize the arguments to the sql state.";
-        }
-        // Copy parameters to internal array.
-        for (; argv[i] != NULL; i++) {
-            view->sql_params[i]     = argv[i];
-            view->sql_params_len[i] = strlen(argv[i]);
-            view->nr_sql_params++;
-        }
-    }
-    // Clear the rest of the parameters.
-    for (; i < MAX_PARAMETERS; i++) {
-        view->sql_params[i]     = NULL;
-        view->sql_params_len[i] = 0;
-    }
-
-    return NULL;
-}
-
 /** Process the OkiokiSetCommand configuration directive.
  */
 const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc, char *const argv[])
 {
+    apr_pool_t            *pool   = cmd->pool;
     mod_okioki_dir_config *conf   = (mod_okioki_dir_config *)_conf;
     off_t                 view_nr = conf->nr_views++;
     view_t                *view   = &conf->views[view_nr];
     unsigned int          i;
+    char                  *param;
 
     // Make sure this configuration directive has at least two arguments.
-    if (argc < 2) {
-        return "[OkiokiSetCommand] Requires at least two arguments.";
+    if (argc < 4) {
+        return "[OkiokiSetCommand] Requires at least four arguments.";
     }
 
     // Decode the command.
@@ -244,55 +176,44 @@ const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc,
         return "[OkiokiSetCommand] First argument must be GET, POST, PUT or DELETE";
     }
 
-    // Compile the regular expression to match the url.
-    if (regcomp(&view->link, argv[1], REG_EXTENDED) != 0) {
-        return "[OkiokiSetCommand] Second argument needs to be a valid regular expression";
+    // Copy the link.
+    if ((view->link = apr_pstrdup(pool, argv[1])) == NULL) {
+        return "[OkiokiSetCommand] Failed to copy second argument.";
     }
+    view->link_len = strlen(view->link);
+
+    if (strcmp(argv[2], "CSV") == 0) {
+        view->output_type = O_CSV;
+    } else if (strcmp(argv[2], "COOKIE") == 0) {
+        view->output_type = O_COOKIE;
+    } else {
+        return "[OkiokiSetCommand] Third argument must be CSV or COOKIE";
+    }
+
+    if ((view->sql = apr_pstrdup(pool, argv[3])) == NULL) {
+        return "[OkiokiSetCommand] Failed to copy fourth argument.";
+    }
+    view->sql_len = strlen(view->sql);
 
     // Copy the parameter names from the rest of argv.
-    view->nr_link_params = 0;
+    view->nr_sql_params = 0;
     for (i = 0; i < MAX_PARAMETERS; i++) {
-        if (i < argc - 2) {
-            char *param = apr_pstrdup(cmd->pool, argv[i + 2]);
+        if (i < argc - 4) {
+            if ((param = apr_pstrdup(cmd->pool, argv[i + 4])) == NULL) {
+                return "[OkiokiSetCommand] Failed to copy sql parameter.";
+            }
 
-            view->link_params[i]     = param;
-            view->link_params_len[i] = strlen(param);
-            view->nr_link_params++;
+            view->sql_params[i]     = param;
+            view->sql_params_len[i] = strlen(param);
+            view->nr_sql_params++;
         } else {
-            view->link_params[i]     = NULL;
-            view->link_params_len[i] = 0;
+            view->sql_params[i]     = NULL;
+            view->sql_params_len[i] = 0;
         }
     }
 
     return NULL;
 }
-
-/** Process the OkiokiCSV configuration directive.
- */
-const char *mod_okioki_dircfg_set_csv(cmd_parms *cmd, void *_conf, int argc, char *const argv[])
-{
-    mod_okioki_dir_config *conf   = (mod_okioki_dir_config *)_conf;
-    off_t                 view_nr = conf->nr_views - 1;
-    view_t                *view   = &conf->views[view_nr];
-    off_t                 i;
-
-    view->nr_csv_params = 0;
-    for (i = 0; i < MAX_PARAMETERS; i++) {
-        if (i < argc) {
-            char *param = apr_pstrdup(cmd->pool, argv[i]);
-
-            view->csv_params[i]     = param;
-            view->csv_params_len[i] = strlen(param);
-            view->nr_csv_params++;
-        } else {
-            view->csv_params[i]     = NULL;
-            view->csv_params_len[i] = 0;
-        }
-    }
-
-    return NULL;
-}
-
 
 /** A set of command to execute when a configuration parameter is parsed.
  */
@@ -302,21 +223,7 @@ static const command_rec mod_okioki_cmds[] = {
         mod_okioki_dircfg_set_command,
         NULL,
         OR_AUTHCFG,
-        "OkiokiCommand GET|POST|PUT|DELETE <regex> [<params>[ <params>]...]"
-    ),
-    AP_INIT_RAW_ARGS(
-        "OkiokiSQL",
-        mod_okioki_dircfg_set_sql,
-        NULL,
-        OR_AUTHCFG,
-        "OkiokiSQL \"<sql statement>\" [<params>[ <params>]...]"
-    ),
-    AP_INIT_TAKE_ARGV(
-        "OkiokiCSV",
-        mod_okioki_dircfg_set_csv,
-        NULL,
-        OR_AUTHCFG,
-        "OkiokiCSV [<result>[ <result>]...]"
+        "OkiokiCommand GET|POST|PUT|DELETE <path> CSV|COOKIE <prepared sql> [<params>[ <params>]...]"
     ),
     {NULL}
 };

@@ -16,20 +16,85 @@
  */
 
 #include <sys/types.h>
-#include <regex.h>
 #include <apr_hash.h>
 #include <apr_strings.h>
+#include <apr_dbd.h>
+#include <httpd.h>
+#include <http_log.h>
+#include <http_request.h>
 #include <http_protocol.h>
+#include <mod_dbd.h>
 #include "views.h"
 
 #define MAX_ARGUMENTS 32
 
-
-view_t *mod_okioki_view_lookup(mod_okioki_dir_config *cfg, request_rec *http_req, apr_hash_t *arguments)
+int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cfg, view_t *view, apr_hash_t *arguments, const apr_dbd_driver_t **db_driver, apr_dbd_results_t **db_result)
 {
-    int k;
-    regmatch_t subs[MAX_ARGUMENTS + 1];
-    apr_pool_t *pool   = http_req->pool;
+    apr_pool_t         *pool = http_request->pool;
+    ap_dbd_t           *db_conn;
+    apr_dbd_prepared_t *db_statement;
+    int                have_result = (view->link_cmd == M_POST) | (view->link_cmd == M_GET);
+    char               *arg;
+    int                argc = view->nr_sql_params;
+    char               *argv[argc + 1];
+    off_t              i;
+    int                nr_rows;
+
+    // Copy the pointers parameters in the right order for the SQL statement.
+    for (i = 0; i < argc; i++) {
+        HTTP_ASSERT_NOT_NULL(
+            arg = (char *)apr_hash_get(arguments, view->sql_params[i], view->sql_params_len[i]),
+            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not find parameter '%s' in request.", view->sql_params[i]
+        )
+
+        argv[i] = arg;
+    }
+    argv[i] = NULL;
+
+    // Retrieve a database connection from the resource pool.
+    HTTP_ASSERT_NOT_NULL(
+        db_conn = ap_dbd_acquire(http_request),
+        HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Can not get database connection."
+    )
+    *db_driver = db_conn->driver;
+
+    // Get the prepared statement.
+    HTTP_ASSERT_NOT_NULL(
+        db_statement = apr_hash_get((db_conn)->prepared, view->sql, view->sql_len),
+        HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Can not find '%s'", view->sql
+    )
+
+    // Execute the statement.
+    *db_result = NULL;
+    if (have_result) {
+        // Execute a select statement. We allow random access here as it allows easier configuration because the number
+        // of columns and the name of the columns are known when random access is enabled.
+        // Also because we use buckets and brigades everything is done in memory already, so streaming data would not
+        // have worked anyway.
+        HTTP_ASSERT_ZERO(
+            apr_dbd_pselect(db_conn->driver, db_conn->pool, db_conn->handle, db_result, db_statement, 1, argc, (const char **)argv),
+            HTTP_BAD_GATEWAY, "[mod_okioki] Can not execute select statement."
+        )
+        HTTP_ASSERT_NOT_NULL(
+            *db_result,
+            HTTP_BAD_GATEWAY, "[mod_okioki] Result was not set by apr_dbd_pselect."
+        )
+    } else {
+        HTTP_ASSERT_ZERO(
+            apr_dbd_pquery(db_conn->driver, db_conn->pool, db_conn->handle, &nr_rows, db_statement, argc, (const char **)argv),
+            HTTP_BAD_GATEWAY, "[mod_okioki] Can not execute query."
+        )
+        if (nr_rows < 1) {
+            ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] query modified zero rows.");
+            return HTTP_NOT_FOUND;
+        }
+    }
+    return HTTP_OK;
+}
+
+
+view_t *mod_okioki_view_lookup(mod_okioki_dir_config *cfg, request_rec *http_req)
+{
     off_t      view_nr;
     view_t     *view;
 
@@ -38,35 +103,14 @@ view_t *mod_okioki_view_lookup(mod_okioki_dir_config *cfg, request_rec *http_req
         view = &cfg->views[view_nr];
 
         // Test the path info against the url.
-        if (
-            view->link_cmd == http_req->method_number &&
-            regexec(&view->link, http_req->path_info, MAX_ARGUMENTS + 1, subs, 0) == 0
-        ) {
+        if (view->link_cmd == http_req->method_number && strcmp(view->link, http_req->path_info) == 0) {
             // Found the url with the current regex, jump forward to extract the arguments.
-            goto found;
+            return view;
         }
     }
+
     // The path_info did not match any of the configured urls.
     return NULL;
-
-found:
-
-    // Extract parameters from url.
-    for (k = 0; k < MAX_ARGUMENTS; k++) {
-        char *key = view->link_params[k];
-        size_t key_len = view->link_params_len[k];
-
-        if (subs[k + 1].rm_so != -1 && key != NULL) {
-            // Copy the value from the path_info.
-            size_t val_len = subs[k + 1].rm_eo - subs[k + 1].rm_so;
-            char *val = apr_pstrndup(pool, &http_req->path_info[subs[k + 1].rm_so], val_len);
-
-            // Add to the arguments.
-            apr_hash_set(arguments, key, key_len, val);
-        }
-    }
-
-    return view;
 }
 
 

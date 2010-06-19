@@ -20,10 +20,13 @@
 #include <httpd.h>
 #include <http_log.h>
 #include <apr_hash.h>
+#include <apr_dbd.h>
 #include "mod_okioki.h"
 
 /** Handle the view.
  */
-view_t *mod_okioki_view_lookup(mod_okioki_dir_config *cfg, request_rec *http_req, apr_hash_t *arguments);
+int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cfg, view_t *view, apr_hash_t *arguments, const apr_dbd_driver_t **db_driver, apr_dbd_results_t **db_result);
+
+view_t *mod_okioki_view_lookup(mod_okioki_dir_config *cfg, request_rec *http_req);
 
 #endif
