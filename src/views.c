@@ -33,7 +33,7 @@ int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cf
     apr_pool_t         *pool = http_request->pool;
     ap_dbd_t           *db_conn;
     apr_dbd_prepared_t *db_statement;
-    int                have_result = (view->link_cmd == M_POST) | (view->link_cmd == M_GET);
+    int                have_result = (http_request->method_number == M_GET) | (http_request->method_number == M_POST);
     char               *arg;
     int                argc = view->nr_sql_params;
     char               *argv[argc + 1];

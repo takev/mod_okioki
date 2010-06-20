@@ -58,7 +58,6 @@
 #define O_COOKIE   2
 
 typedef struct {
-    int     link_cmd;
     char    *sql;
     size_t  sql_len;
     size_t  nr_sql_params;
@@ -69,7 +68,10 @@ typedef struct {
 
 typedef struct {
     // Views.
-    apr_hash_t *views;
+    apr_hash_t *get_views;
+    apr_hash_t *post_views;
+    apr_hash_t *put_views;
+    apr_hash_t *delete_views;
 } mod_okioki_dir_config;
 
 #endif
