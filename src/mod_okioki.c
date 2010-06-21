@@ -55,7 +55,22 @@ static void *mod_okioki_create_dir_config(apr_pool_t *pool, char *dir)
     )
 
     ASSERT_NOT_NULL(
-        new_cfg->views = apr_hash_make(pool),
+        new_cfg->get_views = apr_hash_make(pool),
+        NULL, "[mod_okioki] Failed to allocate views hash table."
+    )
+
+    ASSERT_NOT_NULL(
+        new_cfg->post_views = apr_hash_make(pool),
+        NULL, "[mod_okioki] Failed to allocate views hash table."
+    )
+
+    ASSERT_NOT_NULL(
+        new_cfg->put_views = apr_hash_make(pool),
+        NULL, "[mod_okioki] Failed to allocate views hash table."
+    )
+
+    ASSERT_NOT_NULL(
+        new_cfg->delete_views = apr_hash_make(pool),
         NULL, "[mod_okioki] Failed to allocate views hash table."
     )
 
@@ -101,8 +116,26 @@ static int mod_okioki_handler(request_rec *http_request)
     )
 
     // Find a view matching the url.
+    switch (http_request->method_number) {
+    case M_GET:
+        view = apr_hash_get(cfg->get_views, http_request->path_info, APR_HASH_KEY_STRING);
+        break;
+    case M_POST:
+        view = apr_hash_get(cfg->post_views, http_request->path_info, APR_HASH_KEY_STRING);
+        break;
+    case M_PUT:
+        view = apr_hash_get(cfg->put_views, http_request->path_info, APR_HASH_KEY_STRING);
+        break;
+    case M_DELETE:
+        view = apr_hash_get(cfg->delete_views, http_request->path_info, APR_HASH_KEY_STRING);
+        break;
+    default:
+        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] Method '%i' not supported.", (int)http_request->method_number);
+        http_request->allowed = (AP_METHOD_BIT << M_GET) | (AP_METHOD_BIT << M_POST) | (AP_METHOD_BIT << M_PUT) | (AP_METHOD_BIT << M_DELETE);
+        return HTTP_METHOD_NOT_ALLOWED;
+    }
     ASSERT_NOT_NULL(
-        view = apr_hash_get(cfg->views, http_request->path_info, APR_HASH_KEY_STRING),
+        view,
         HTTP_NOT_FOUND, "[mod_okioki] Could not find view for '%s'.", http_request->path_info
     )
 
@@ -191,17 +224,14 @@ const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc,
     }
 
     // Add the view to the hash table.
-    apr_hash_set(conf->views, link, APR_HASH_KEY_STRING, view);
-
-    // Decode the command.
     if (strcmp(argv[0], "GET") == 0) {
-        view->link_cmd = M_GET;
+        apr_hash_set(conf->get_views, link, APR_HASH_KEY_STRING, view);
     } else if (strcmp(argv[0], "POST") == 0) {
-        view->link_cmd = M_POST;
+        apr_hash_set(conf->post_views, link, APR_HASH_KEY_STRING, view);
     } else if (strcmp(argv[0], "PUT") == 0) {
-        view->link_cmd = M_PUT;
+        apr_hash_set(conf->put_views, link, APR_HASH_KEY_STRING, view);
     } else if (strcmp(argv[0], "DELETE") == 0) {
-        view->link_cmd = M_DELETE;
+        apr_hash_set(conf->delete_views, link, APR_HASH_KEY_STRING, view);
     } else {
         return "[OkiokiSetCommand] First argument must be GET, POST, PUT or DELETE";
     }
