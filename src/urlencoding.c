@@ -129,30 +129,13 @@ int mod_okioki_parse_query(request_rec *http_req, apr_hash_t *arguments, char *_
 }
 
 
-int mod_okioki_parse_posted_query(request_rec *http_req, apr_hash_t *arguments)
+int mod_okioki_parse_posted_query(request_rec *http_req, apr_pool_t *bucket_pool, apr_bucket_alloc_t *bucket_alloc, apr_bucket_brigade *bb, apr_hash_t *arguments)
 {
     apr_pool_t *pool = http_req->pool;
     size_t done = 0;
     size_t todo = http_req->remaining;
     size_t r;
     char *buffer;
-    const char *content_type;
-
-    // Check if the method allows for input data.
-    if (!(http_req->method_number & (M_POST | M_PUT))) {
-        return HTTP_OK;
-    }
-
-    // Check for the content-type of the request.
-    ASSERT_NOT_NULL(
-        content_type = apr_table_get(http_req->headers_in, "Content-type"),
-        HTTP_BAD_REQUEST, "[mod_okioki.c] No content-type for PUT or POST."
-    )
-
-    if (strcmp(content_type, "application/x-www-form-urlencoded") != 0) {
-        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] Unknonw content-type '%s'.", content_type);
-        return HTTP_BAD_REQUEST;
-    }
 
     // Extract paramaters from input data.
     if (ap_setup_client_block(http_req, REQUEST_CHUNKED_ERROR) != OK) {

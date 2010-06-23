@@ -1,5 +1,3 @@
-#ifndef URLENCODING_H
-#define URLENCODING_H
 /* mod_okioki is an apche module which provides a RESTful data service.
  * Copyright (C) 2010  Take Vos
  * 
@@ -17,15 +15,26 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <httpd.h>
-#include <http_log.h>
-#include <apr_hash.h>
 
-void mod_okioki_urldecode(char *out, const char *in);
-int mod_okioki_parse_query_phrase(request_rec *http_req, apr_hash_t *arguments, char *s);
-int mod_okioki_parse_query(request_rec *http_req, apr_hash_t *arguments, char *_s);
-int mod_okioki_parse_posted_query(request_rec *http_req, apr_pool_t *pool, apr_bucket_alloc_t *alloc, apr_bucket_brigade *bb, apr_hash_t *arguments);
+#include "mod_okioki.h"
+#include "util.h"
 
+int mod_okioki_realloc(apr_pool_t *pool, void **buf, size_t old_size, size_t new_size)
+{
+    void   *tmp = apr_palloc(new_size);
+    size_t copy_size = MIN(old_size, new_size);
 
+    // If allocated is failed, we leave the buffer alone and stop processing.
+    if (tmp == NULL)
+        return -1;
+    }
 
-#endif
+    // Copy the memory.
+    memcpy(tmp, *buf, copy_size);
+
+    // Replace the old buffer with the new buffer. The pool at some point
+    // gets rid of the old buffer.
+    *buf = tmp;
+    return 0;
+}
+

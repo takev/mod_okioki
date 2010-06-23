@@ -23,6 +23,8 @@
 #define MAX_PARAMETERS 32
 #define MAX_VIEWS 200
 #define MAX_ROWS 1024
+#define MIN_INPUT_BUFFER   65536        // 64 kbyte
+#define MAX_INPUT_BUFFER   67108864     // 64 MByte
 
 #define ASSERT_NOT_NULL(expr, http_code, msg...) \
     if (__builtin_expect((expr) == NULL, 0)) { \
