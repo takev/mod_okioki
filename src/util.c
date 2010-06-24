@@ -19,22 +19,34 @@
 #include "mod_okioki.h"
 #include "util.h"
 
-int mod_okioki_realloc(apr_pool_t *pool, void **buf, size_t old_size, size_t new_size)
+void *mod_okioki_realloc(apr_pool_t *pool, void *buf, size_t old_size, size_t new_size)
 {
-    void   *tmp = apr_palloc(new_size);
+    void   *tmp = apr_palloc(pool, new_size);
     size_t copy_size = MIN(old_size, new_size);
 
     // If allocated is failed, we leave the buffer alone and stop processing.
-    if (tmp == NULL)
-        return -1;
+    if (tmp == NULL) {
+        return NULL;
     }
 
     // Copy the memory.
-    memcpy(tmp, *buf, copy_size);
+    memcpy(tmp, buf, copy_size);
 
     // Replace the old buffer with the new buffer. The pool at some point
     // gets rid of the old buffer.
-    *buf = tmp;
-    return 0;
+    return tmp;
+}
+
+size_t mod_okioki_nlpo2(size_t x)
+{
+    x |= (x >> 1);
+    x |= (x >> 2);
+    x |= (x >> 4);
+    x |= (x >> 8);
+    x |= (x >> 16);
+    if (sizeof (x) == 8) {
+        x |= (x >> 32);
+    }
+    return x + 1;
 }
 

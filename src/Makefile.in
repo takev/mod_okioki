@@ -73,7 +73,8 @@ LTLIBRARIES = $(mod_LTLIBRARIES)
 mod_okioki_la_LIBADD =
 am_mod_okioki_la_OBJECTS = mod_okioki_la-mod_okioki.lo \
 	mod_okioki_la-views.lo mod_okioki_la-cookies.lo \
-	mod_okioki_la-urlencoding.lo mod_okioki_la-csv.lo
+	mod_okioki_la-urlencoding.lo mod_okioki_la-csv.lo \
+	mod_okioki_la-util.lo
 mod_okioki_la_OBJECTS = $(am_mod_okioki_la_OBJECTS)
 mod_okioki_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(mod_okioki_la_CFLAGS) \
@@ -226,7 +227,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 moddir = ${AP_LIBEXECDIR}
 mod_LTLIBRARIES = mod_okioki.la
-mod_okioki_la_SOURCES = mod_okioki.c views.c cookies.c urlencoding.c csv.c
+mod_okioki_la_SOURCES = mod_okioki.c views.c cookies.c urlencoding.c csv.c util.c
 mod_okioki_la_CFLAGS = -Wall ${MODULE_CFLAGS}
 mod_okioki_la_LDFLAGS = -avoid-version -module ${MODULE_LDFLAGS}
 all: all-am
@@ -307,6 +308,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mod_okioki_la-csv.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mod_okioki_la-mod_okioki.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mod_okioki_la-urlencoding.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mod_okioki_la-util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mod_okioki_la-views.Plo@am__quote@
 
 .c.o:
@@ -364,6 +366,13 @@ mod_okioki_la-csv.lo: csv.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='csv.c' object='mod_okioki_la-csv.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(mod_okioki_la_CFLAGS) $(CFLAGS) -c -o mod_okioki_la-csv.lo `test -f 'csv.c' || echo '$(srcdir)/'`csv.c
+
+mod_okioki_la-util.lo: util.c
+@am__fastdepCC_TRUE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(mod_okioki_la_CFLAGS) $(CFLAGS) -MT mod_okioki_la-util.lo -MD -MP -MF $(DEPDIR)/mod_okioki_la-util.Tpo -c -o mod_okioki_la-util.lo `test -f 'util.c' || echo '$(srcdir)/'`util.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/mod_okioki_la-util.Tpo $(DEPDIR)/mod_okioki_la-util.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='util.c' object='mod_okioki_la-util.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(mod_okioki_la_CFLAGS) $(CFLAGS) -c -o mod_okioki_la-util.lo `test -f 'util.c' || echo '$(srcdir)/'`util.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

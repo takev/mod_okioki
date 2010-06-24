@@ -24,8 +24,6 @@
 void mod_okioki_urldecode(char *out, const char *in);
 int mod_okioki_parse_query_phrase(request_rec *http_req, apr_hash_t *arguments, char *s);
 int mod_okioki_parse_query(request_rec *http_req, apr_hash_t *arguments, char *_s);
-int mod_okioki_parse_posted_query(request_rec *http_req, apr_pool_t *pool, apr_bucket_alloc_t *alloc, apr_bucket_brigade *bb, apr_hash_t *arguments);
-
 
 
 #endif

@@ -44,7 +44,7 @@
         return http_code; \
     }
 
-#define ASSERT_NOT_NEG(expr, http_code, msg...) \
+#define ASSERT_POSITIVE(expr, http_code, msg...) \
     if (__builtin_expect((expr) < 0, 0)) { \
         ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, msg); \
         return http_code; \

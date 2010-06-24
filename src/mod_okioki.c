@@ -33,6 +33,7 @@
 #include "cookies.h"
 #include "urlencoding.h"
 #include "csv.h"
+#include "util.h"
 
 module AP_MODULE_DECLARE_DATA okioki_module;
 
@@ -82,9 +83,8 @@ static void *mod_okioki_create_dir_config(apr_pool_t *pool, char *dir)
  * can modify the data.
  *
  * @param http_request   The HTTP request record.
- * @param _data          This returns a pointer to the data read.
- * @param _data_len      On input this should show the maximum size of the input buffer to allocate.
- *                       On return this contains the amount of data read.
+ * @param _data          On return this contains a pointer to the data read.
+ * @param _data_len      On return this contains the amount of data read.
  * @retrurns             HTTP_OK on success, or an other HTTP error value.
  */
 static int mod_okioki_read_data(request_rec *http_request, char **_data, size_t *_data_len)
@@ -96,8 +96,10 @@ static int mod_okioki_read_data(request_rec *http_request, char **_data, size_t 
     apr_bucket              *bucket;
     int                     seen_eos;
     char                    *data;
-    size_t                  data_size = *_data_len + 1;
+    size_t                  data_size = MIN_INPUT_BUFFER;
     size_t                  data_len = 0;
+    const char              *tmp_data;
+    size_t                  tmp_data_len;
 
     // Allocate input buffer.
     ASSERT_NOT_NULL(
@@ -118,7 +120,7 @@ static int mod_okioki_read_data(request_rec *http_request, char **_data, size_t 
             HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not get input brigade from request."
         )
 
-        for (bucket = APR_BRIGADE_FIRST(bb); bucket |= APR_BRIGADE_SENTINEL(bb); bucket = APR_BUCKET_NEXT(bucket)) {
+        for (bucket = APR_BRIGADE_FIRST(bb); bucket != APR_BRIGADE_SENTINEL(bb); bucket = APR_BUCKET_NEXT(bucket)) {
             // We stop reading completely when we find an EOS bucket.
             if (APR_BUCKET_IS_EOS(bucket)) {
                 seen_eos = 1;
@@ -137,19 +139,32 @@ static int mod_okioki_read_data(request_rec *http_request, char **_data, size_t 
 
             // Copy the data from the bucket into our data buffer.
             apr_bucket_read(bucket, &tmp_data, &tmp_data_len, APR_BLOCK_READ);
-            copy_len = MIN(tmp_data_len, data_size - data_len);
-            memcpy(&data[data_len], tmp_data, copy_len);
-            data_len+= copy_len;
+
+            // Check if there is enough room to copy, if not make room.
+            if (tmp_data_len > (data_size - data_len)) {
+                size_t new_size = mod_okioki_nlpo2(data_len + tmp_data_len);
+
+                // Check if the new size is within what is allowed.
+                ASSERT_POSITIVE(
+                    MAX_INPUT_BUFFER - new_size,
+                    HTTP_BAD_REQUEST, "[mod_okioki] To much input data %i", (int)new_size
+                )
+
+                // Try and reallocate the buffer and copy current data into it.
+                ASSERT_NOT_NULL(
+                    data = mod_okioki_realloc(pool, data, data_len, new_size),
+                    HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not resize input buffer to %i", (int)new_size
+                )
+            }
+
+            // Copy the data into the buffer.
+            memcpy(&data[data_len], tmp_data, tmp_data_len);
+            data_len+= tmp_data_len;
         }
 
         // Remove all buckets from brigades so we can reuse it on the next iteration.
         apr_brigade_cleanup(bb);
     } while (!seen_eos);
-
-    if (data_len == data_size) {
-        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] Input data is to large, maximum allowed is %i.", (int)data_size - 1);
-        return HTTP_BAD_REQUEST;
-    }
 
     // Pass the data buffer, and the length of the data to the caller.
     *_data = data;
@@ -160,9 +175,11 @@ static int mod_okioki_read_data(request_rec *http_request, char **_data, size_t 
 static int mod_okioki_input_handler(request_rec *http_request, apr_hash_t **_arguments)
 {
     apr_pool_t              *pool = http_request->pool;
-    apr_hadh_t              *arguments;
-    char                    *input_data;
-    size_t                  input_data_size;
+    apr_hash_t              *arguments;
+    char                    *data;
+    size_t                  data_size;
+    int                     ret;
+    const char              *content_type;
 
     // Create arguments hash table. Then pass these arguments back to the caller.
     ASSERT_NOT_NULL(
@@ -199,17 +216,16 @@ static int mod_okioki_input_handler(request_rec *http_request, apr_hash_t **_arg
 
         if (strcmp(content_type, "application/x-www-form-urlencoded") == 0) {
             ASSERT_HTTP_OK(
-                ret = mod_okioki_parse_posted_query(http_request, bucket_pool, bucket_alloc, bb_in, arguments),
+                ret = mod_okioki_parse_query(http_request, arguments, data),
                 ret, "[mod_okioki] Could not parse posted-query."
             )
         } else {
             ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] Input content-type '%s' not supported.", content_type);
             return HTTP_BAD_REQUEST;
         }
-
-        apr_brigade_cleanup(bb_in);
     }
 
+    return HTTP_OK;
 }
 
 /** This is the main handler for any request withing some folder.
@@ -229,11 +245,9 @@ static int mod_okioki_handler(request_rec *http_request)
     view_t                  *view;
     apr_hash_t              *arguments;
     apr_bucket_brigade      *bb_out;
-    apr_bucket_brigade      *bb_in;
     int                     ret;
     const apr_dbd_driver_t  *db_driver;
     apr_dbd_results_t       *db_result;
-    const char              *content_type;
 
     // Check if we need to process the request. We only need to if the handler is set to "okioki-handler".
     if (http_request->handler == NULL || (strcmp(http_request->handler, "okioki-handler") != 0)) {
