@@ -57,7 +57,6 @@
     }
 
 #define O_CSV      1
-#define O_COOKIE   2
 
 typedef struct {
     char    *sql;

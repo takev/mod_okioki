@@ -30,7 +30,6 @@
 #include <libpq-fe.h>
 #include "mod_okioki.h"
 #include "views.h"
-#include "cookies.h"
 #include "urlencoding.h"
 #include "csv.h"
 #include "util.h"
@@ -187,12 +186,6 @@ static int mod_okioki_input_handler(request_rec *http_request, apr_hash_t **_arg
         HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Failed to allocate argument table."
     )
     *_arguments = arguments;
-
-    // Extract cookies from request.
-    ASSERT_HTTP_OK(
-        ret = mod_okioki_get_cookies(http_request, arguments),
-        ret, "[mod_okioki] Could not parse http-cookies."
-    )
 
     // Extract parameters from the query string.
     ASSERT_HTTP_OK(
@@ -360,10 +353,8 @@ const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc,
 
     if (strcmp(argv[2], "CSV") == 0) {
         view->output_type = O_CSV;
-    } else if (strcmp(argv[2], "COOKIE") == 0) {
-        view->output_type = O_COOKIE;
     } else {
-        return "[OkiokiSetCommand] Third argument must be CSV or COOKIE";
+        return "[OkiokiSetCommand] Third argument must be CSV";
     }
 
     if ((view->sql = apr_pstrdup(pool, argv[3])) == NULL) {
@@ -399,7 +390,7 @@ static const command_rec mod_okioki_cmds[] = {
         mod_okioki_dircfg_set_command,
         NULL,
         OR_AUTHCFG,
-        "OkiokiCommand GET|POST|PUT|DELETE <path> CSV|COOKIE <prepared sql> [<params>[ <params>]...]"
+        "OkiokiCommand GET|POST|PUT|DELETE <path> CSV <prepared sql> [<params>[ <params>]...]"
     ),
     {NULL}
 };
