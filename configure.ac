@@ -2,7 +2,7 @@
 
 # Required initializer
 AC_PREREQ(2.61)
-AC_INIT([mod_tdbapi], [0.3], [take.vos@vosgames.nl])
+AC_INIT([mod_tdbapi], [0.4], [take.vos@vosgames.nl])
 AC_CONFIG_HEADER([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 

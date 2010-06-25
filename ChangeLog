@@ -1,4 +1,8 @@
 
+2010-06-25 Take Vos <take.vos@vosgames.nl>
+
+* Replace POST/PUT processing with a buckets and brigades implementation.
+
 2010-06-20 Take Vos <take.vos@vosgames.nl>
 
 * Changed to see the difference between GET, POST, PUT and delete.
