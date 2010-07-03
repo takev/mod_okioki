@@ -49,30 +49,15 @@ static void *mod_okioki_create_dir_config(apr_pool_t *pool, char *dir)
     mod_okioki_dir_config *new_cfg;
 
     // Allocate structure.
-    ASSERT_NOT_NULL(
-        new_cfg = (mod_okioki_dir_config *)apr_palloc(pool, sizeof (mod_okioki_dir_config)),
-        NULL, "[mod_okioki] Failed to allocate per-directory config."
-    )
+    if ((new_cfg = (mod_okioki_dir_config *)apr_palloc(pool, sizeof (mod_okioki_dir_config))) == NULL) {
+        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "Failed to allocate per-directory config.");
+        return NULL;
+    }
 
-    ASSERT_NOT_NULL(
-        new_cfg->get_views = apr_hash_make(pool),
-        NULL, "[mod_okioki] Failed to allocate views hash table."
-    )
-
-    ASSERT_NOT_NULL(
-        new_cfg->post_views = apr_hash_make(pool),
-        NULL, "[mod_okioki] Failed to allocate views hash table."
-    )
-
-    ASSERT_NOT_NULL(
-        new_cfg->put_views = apr_hash_make(pool),
-        NULL, "[mod_okioki] Failed to allocate views hash table."
-    )
-
-    ASSERT_NOT_NULL(
-        new_cfg->delete_views = apr_hash_make(pool),
-        NULL, "[mod_okioki] Failed to allocate views hash table."
-    )
+    if ((new_cfg->views = apr_hash_make(pool)) == NULL) {
+        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "Failed to allocate views hash table.");
+        return NULL;
+    }
 
     return (void *)new_cfg;
 }
@@ -86,7 +71,7 @@ static void *mod_okioki_create_dir_config(apr_pool_t *pool, char *dir)
  * @param _data_len      On return this contains the amount of data read.
  * @retrurns             HTTP_OK on success, or an other HTTP error value.
  */
-static int mod_okioki_read_data(request_rec *http_request, char **_data, size_t *_data_len)
+static int mod_okioki_read_data(request_rec *http_request, char **_data, size_t *_data_len, char **error)
 {
     apr_pool_t              *pool = http_request->pool;
     apr_pool_t              *bucket_pool = http_request->connection->pool;
@@ -103,20 +88,20 @@ static int mod_okioki_read_data(request_rec *http_request, char **_data, size_t 
     // Allocate input buffer.
     ASSERT_NOT_NULL(
         data = apr_palloc(pool, data_size),
-        HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate input buffer of size %i", (int)data_size
+        HTTP_INTERNAL_SERVER_ERROR, "Could not allocate input buffer of size %i", (int)data_size
     )
 
     // Create a brigade to work with.
     ASSERT_NOT_NULL(
         bb = apr_brigade_create(bucket_pool, bucket_alloc),
-        HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not create brigade for input."
+        HTTP_INTERNAL_SERVER_ERROR, "Could not create brigade for input."
     )
 
     // We will need to read multiple times into the brigade, until we find an eod bucket.
     do {
         ASSERT_APR_SUCCESS(
             ap_get_brigade(http_request->input_filters, bb, AP_MODE_READBYTES, APR_BLOCK_READ, HUGE_STRING_LEN),
-            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not get input brigade from request."
+            HTTP_INTERNAL_SERVER_ERROR, "Could not get input brigade from request."
         )
 
         for (bucket = APR_BRIGADE_FIRST(bb); bucket != APR_BRIGADE_SENTINEL(bb); bucket = APR_BUCKET_NEXT(bucket)) {
@@ -146,13 +131,13 @@ static int mod_okioki_read_data(request_rec *http_request, char **_data, size_t 
                 // Check if the new size is within what is allowed.
                 ASSERT_POSITIVE(
                     MAX_INPUT_BUFFER - new_size,
-                    HTTP_BAD_REQUEST, "[mod_okioki] To much input data %i", (int)new_size
+                    HTTP_BAD_REQUEST, "To much input data %i", (int)new_size
                 )
 
                 // Try and reallocate the buffer and copy current data into it.
                 ASSERT_NOT_NULL(
                     data = mod_okioki_realloc(pool, data, data_len, new_size),
-                    HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not resize input buffer to %i", (int)new_size
+                    HTTP_INTERNAL_SERVER_ERROR, "Could not resize input buffer to %i", (int)new_size
                 )
             }
 
@@ -171,7 +156,7 @@ static int mod_okioki_read_data(request_rec *http_request, char **_data, size_t 
     return HTTP_OK;
 }
 
-static int mod_okioki_input_handler(request_rec *http_request, apr_hash_t **_arguments)
+static int mod_okioki_input_handler(request_rec *http_request, apr_hash_t **_arguments, char **error)
 {
     apr_pool_t              *pool = http_request->pool;
     apr_hash_t              *arguments;
@@ -183,22 +168,22 @@ static int mod_okioki_input_handler(request_rec *http_request, apr_hash_t **_arg
     // Create arguments hash table. Then pass these arguments back to the caller.
     ASSERT_NOT_NULL(
         arguments = apr_hash_make(pool),
-        HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Failed to allocate argument table."
+        HTTP_INTERNAL_SERVER_ERROR, "Failed to allocate argument table."
     )
     *_arguments = arguments;
 
     // Extract parameters from the query string.
     ASSERT_HTTP_OK(
-        ret = mod_okioki_parse_query(http_request, arguments, http_request->args),
-        ret, "[mod_okioki] Could not parse url-query."
+        ret = mod_okioki_parse_query(http_request, arguments, http_request->args, error),
+        ret, "Could not parse url-query."
     )
 
     // Extract parameters from the POST/PUT data.
     if (((http_request->method_number == M_POST) | (http_request->method_number == M_PUT))) {
         // Read all data from the buckets and brigades.
         ASSERT_HTTP_OK(
-            ret = mod_okioki_read_data(http_request, &data, &data_size),
-            ret, "[mod_okioki] Could not read input from buckets."
+            ret = mod_okioki_read_data(http_request, &data, &data_size, error),
+            ret, "Could not read input from buckets."
         )
 
         // Check for the content-type of the request.
@@ -209,16 +194,88 @@ static int mod_okioki_input_handler(request_rec *http_request, apr_hash_t **_arg
 
         if (strcmp(content_type, "application/x-www-form-urlencoded") == 0) {
             ASSERT_HTTP_OK(
-                ret = mod_okioki_parse_query(http_request, arguments, data),
-                ret, "[mod_okioki] Could not parse posted-query."
+                ret = mod_okioki_parse_query(http_request, arguments, data, error),
+                ret, "Could not parse posted-query."
             )
         } else {
-            ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] Input content-type '%s' not supported.", content_type);
+            ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "Input content-type '%s' not supported.", content_type);
             return HTTP_BAD_REQUEST;
         }
     }
 
     return HTTP_OK;
+}
+
+/** Generate error output.
+ */
+int mod_okioki_generate_error(request_rec *http_request, apr_pool_t *pool, apr_bucket_alloc_t *alloc, int ret, char **error)
+{
+    apr_bucket_brigade *bb;
+    apr_bucket *b;
+
+    ASSERT_NOT_NULL(
+        bb = apr_brigade_create(pool, alloc),
+        HTTP_INTERNAL_SERVER_ERROR, "Could not allocate a bucket brigade."
+    )
+
+    // Add a line for the error.
+    if (error != NULL) {
+        ASSERT_NOT_NULL(
+            b = apr_bucket_transient_create(*error, strlen(*error), alloc),
+            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
+        )
+        APR_BRIGADE_INSERT_TAIL(bb, b);
+
+        ASSERT_NOT_NULL(
+            b = apr_bucket_immortal_create("\n", 1, alloc),
+            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
+        )
+        APR_BRIGADE_INSERT_TAIL(bb, b);
+
+    } else {
+        ASSERT_NOT_NULL(
+            b = apr_bucket_immortal_create("Unknown error.\n", 15, alloc),
+            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not allocate bucket."
+        )
+        APR_BRIGADE_INSERT_TAIL(bb, b);
+    }
+
+    // Add an end-of-stream.
+    ASSERT_NOT_NULL(
+        b = apr_bucket_eos_create(alloc),
+        HTTP_INTERNAL_SERVER_ERROR, "Could not allocate bucket."
+    )
+    APR_BRIGADE_INSERT_TAIL(bb, b);
+
+    // Return the data.
+    ap_set_content_type(http_request, "text/plain");
+    http_request->status = ret;
+    return ap_pass_brigade(http_request->output_filters, bb);
+}
+
+/** Generate no output.
+ */
+int mod_okioki_generate_empty(request_rec *http_request, apr_pool_t *pool, apr_bucket_alloc_t *alloc, char **error)
+{
+    apr_bucket_brigade *bb;
+    apr_bucket *b;
+
+    ASSERT_NOT_NULL(
+        bb = apr_brigade_create(pool, alloc),
+        HTTP_INTERNAL_SERVER_ERROR, "Could not allocate a bucket brigade."
+    )
+
+    // Add an end-of-stream.
+    ASSERT_NOT_NULL(
+        b = apr_bucket_eos_create(alloc),
+        HTTP_INTERNAL_SERVER_ERROR, "Could not allocate bucket."
+    )
+    APR_BRIGADE_INSERT_TAIL(bb, b);
+
+    // Return the data.
+    ap_set_content_type(http_request, "text/plain");
+    http_request->status = HTTP_OK;
+    return ap_pass_brigade(http_request->output_filters, bb);
 }
 
 /** This is the main handler for any request withing some folder.
@@ -234,73 +291,45 @@ static int mod_okioki_handler(request_rec *http_request)
     apr_pool_t              *pool = http_request->pool;
     apr_pool_t              *bucket_pool = http_request->connection->pool;
     apr_bucket_alloc_t      *bucket_alloc = http_request->connection->bucket_alloc;
-    mod_okioki_dir_config   *cfg;
+    mod_okioki_dir_config   *cfg = (mod_okioki_dir_config *)ap_get_module_config(http_request->per_dir_config, &okioki_module);
+    char                    *view_name;
     view_t                  *view;
     apr_hash_t              *arguments;
-    apr_bucket_brigade      *bb_out;
     int                     ret;
     const apr_dbd_driver_t  *db_driver;
     apr_dbd_results_t       *db_result;
+    char                    *_error;
+    char                    **error = &_error;
 
     // Check if we need to process the request. We only need to if the handler is set to "okioki-handler".
     if (http_request->handler == NULL || (strcmp(http_request->handler, "okioki-handler") != 0)) {
         return DECLINED;
     }
 
+    // Find a view matching the url.
+    view_name = apr_pstrcat(pool, http_request->method, " ", http_request->path_info, NULL);
+    ASSERT_NOT_NULL(
+        view = apr_hash_get(cfg->views, view_name, APR_HASH_KEY_STRING),
+        HTTP_NOT_FOUND, "Could not find view for '%s'.", view_name
+    )
+
     // Handle all input data and build up the arguments table. These arguments are used in the execution
     // of the prepared sql statement.
-    ASSERT_HTTP_OK(
-        ret = mod_okioki_input_handler(http_request, &arguments),
-        ret, "[mod_okioki] Failed to read input."
-    )
-
-    // Retrieve the per-directory configuration for this request.
-    ASSERT_NOT_NULL(
-        cfg = (mod_okioki_dir_config *)ap_get_module_config(http_request->per_dir_config, &okioki_module),
-        HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not get the per-directory config."
-    )
-
-    // Find a view matching the url.
-    switch (http_request->method_number) {
-    case M_GET:
-        view = apr_hash_get(cfg->get_views, http_request->path_info, APR_HASH_KEY_STRING);
-        break;
-    case M_POST:
-        view = apr_hash_get(cfg->post_views, http_request->path_info, APR_HASH_KEY_STRING);
-        break;
-    case M_PUT:
-        view = apr_hash_get(cfg->put_views, http_request->path_info, APR_HASH_KEY_STRING);
-        break;
-    case M_DELETE:
-        view = apr_hash_get(cfg->delete_views, http_request->path_info, APR_HASH_KEY_STRING);
-        break;
-    default:
-        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] Method '%i' not supported.", (int)http_request->method_number);
-        http_request->allowed = (AP_METHOD_BIT << M_GET) | (AP_METHOD_BIT << M_POST) | (AP_METHOD_BIT << M_PUT) | (AP_METHOD_BIT << M_DELETE);
-        return HTTP_METHOD_NOT_ALLOWED;
+    if ((ret = mod_okioki_input_handler(http_request, &arguments, error)) != HTTP_OK) {
+        return mod_okioki_generate_error(http_request, bucket_pool, bucket_alloc, ret, error);
     }
-    ASSERT_NOT_NULL(
-        view,
-        HTTP_NOT_FOUND, "[mod_okioki] Could not find view for '%s'.", http_request->path_info
-    )
 
     // Handle the view.
-    ASSERT_HTTP_OK(
-        ret = mod_okioki_view_execute(http_request, cfg, view, arguments, &db_driver, &db_result),
-        ret, "[mod_okioki] Could not execute view"
-    )
+    if ((ret = mod_okioki_view_execute(http_request, cfg, view, arguments, &db_driver, &db_result, error)) != HTTP_OK) {
+        return mod_okioki_generate_error(http_request, bucket_pool, bucket_alloc, ret, error);
+    }
 
     // Convert result to csv string.
     if (db_result != NULL) {
-        ASSERT_NOT_NULL(
-            bb_out = mod_okioki_generate_csv(bucket_pool, bucket_alloc, view, db_driver, db_result),
-            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not generate text/csv."
-        )
-        ap_set_content_type(http_request, "text/csv");
-        return ap_pass_brigade(http_request->output_filters, bb_out);
+        return mod_okioki_generate_csv(http_request, bucket_pool, bucket_alloc, db_driver, db_result, error);
+    } else {
+        return mod_okioki_generate_empty(http_request, bucket_pool, bucket_alloc, error);
     }
-
-    return HTTP_OK;    
 }
 
 /** This function setups all the handlers at startup.
@@ -318,10 +347,10 @@ const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc,
 {
     apr_pool_t            *pool      = cmd->pool;
     mod_okioki_dir_config *conf      = (mod_okioki_dir_config *)_conf;
+    char                  *view_name;
     view_t                *view;
     unsigned int          i;
     char                  *param;
-    char                  *link;
 
     // Make sure this configuration directive has at least two arguments.
     if (argc < 4) {
@@ -333,23 +362,12 @@ const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc,
         return "[OkiokiSetCommand] Could not allocate view.";
     }
 
-    // Copy the link, as the hash table remembers only a reference.
-    if ((link = apr_pstrdup(pool, argv[1])) == NULL) {
-        return "[OkiokiSetCommand] Could not copy link.";
+    // Add the view to the hash table. The name of the view is the method
+    // and the url joined by a white space.
+    if ((view_name = apr_pstrcat(pool, argv[0], " ", argv[1], NULL)) == NULL) {
+        return "[OkiokiSetCommand] Failed to allocate name of view.";
     }
-
-    // Add the view to the hash table.
-    if (strcmp(argv[0], "GET") == 0) {
-        apr_hash_set(conf->get_views, link, APR_HASH_KEY_STRING, view);
-    } else if (strcmp(argv[0], "POST") == 0) {
-        apr_hash_set(conf->post_views, link, APR_HASH_KEY_STRING, view);
-    } else if (strcmp(argv[0], "PUT") == 0) {
-        apr_hash_set(conf->put_views, link, APR_HASH_KEY_STRING, view);
-    } else if (strcmp(argv[0], "DELETE") == 0) {
-        apr_hash_set(conf->delete_views, link, APR_HASH_KEY_STRING, view);
-    } else {
-        return "[OkiokiSetCommand] First argument must be GET, POST, PUT or DELETE";
-    }
+    apr_hash_set(conf->views, view_name, APR_HASH_KEY_STRING, view);
 
     if (strcmp(argv[2], "CSV") == 0) {
         view->output_type = O_CSV;

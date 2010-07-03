@@ -28,7 +28,7 @@
 
 #define MAX_ARGUMENTS 32
 
-int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cfg, view_t *view, apr_hash_t *arguments, const apr_dbd_driver_t **db_driver, apr_dbd_results_t **db_result)
+int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cfg, view_t *view, apr_hash_t *arguments, const apr_dbd_driver_t **db_driver, apr_dbd_results_t **db_result, char **error)
 {
     apr_pool_t         *pool = http_request->pool;
     ap_dbd_t           *db_conn;
@@ -39,12 +39,13 @@ int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cf
     char               *argv[argc + 1];
     off_t              i;
     int                nr_rows;
+    int                ret;
 
     // Copy the pointers parameters in the right order for the SQL statement.
     for (i = 0; i < argc; i++) {
         ASSERT_NOT_NULL(
             arg = (char *)apr_hash_get(arguments, view->sql_params[i], view->sql_params_len[i]),
-            HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Could not find parameter '%s' in request.", view->sql_params[i]
+            HTTP_INTERNAL_SERVER_ERROR, "Could not find parameter '%s' in request.", view->sql_params[i]
         )
 
         argv[i] = arg;
@@ -54,14 +55,14 @@ int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cf
     // Retrieve a database connection from the resource pool.
     ASSERT_NOT_NULL(
         db_conn = ap_dbd_acquire(http_request),
-        HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Can not get database connection."
+        HTTP_INTERNAL_SERVER_ERROR, "Can not get database connection."
     )
     *db_driver = db_conn->driver;
 
     // Get the prepared statement.
     ASSERT_NOT_NULL(
         db_statement = apr_hash_get((db_conn)->prepared, view->sql, view->sql_len),
-        HTTP_INTERNAL_SERVER_ERROR, "[mod_okioki] Can not find '%s'", view->sql
+        HTTP_INTERNAL_SERVER_ERROR, "Can not find '%s'", view->sql
     )
 
     // Execute the statement.
@@ -72,20 +73,22 @@ int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cf
         // Also because we use buckets and brigades everything is done in memory already, so streaming data would not
         // have worked anyway.
         ASSERT_APR_SUCCESS(
-            apr_dbd_pselect(db_conn->driver, db_conn->pool, db_conn->handle, db_result, db_statement, 1, argc, (const char **)argv),
-            HTTP_BAD_GATEWAY, "[mod_okioki] Can not execute select statement."
+            ret = apr_dbd_pselect(db_conn->driver, db_conn->pool, db_conn->handle, db_result, db_statement, 1, argc, (const char **)argv),
+            HTTP_BAD_GATEWAY, "%s", apr_dbd_error(db_conn->driver, db_conn->handle, ret)
         )
+
         ASSERT_NOT_NULL(
             *db_result,
-            HTTP_BAD_GATEWAY, "[mod_okioki] Result was not set by apr_dbd_pselect."
+            HTTP_BAD_GATEWAY, "Result was not set by apr_dbd_pselect."
         )
     } else {
         ASSERT_APR_SUCCESS(
-            apr_dbd_pquery(db_conn->driver, db_conn->pool, db_conn->handle, &nr_rows, db_statement, argc, (const char **)argv),
-            HTTP_BAD_GATEWAY, "[mod_okioki] Can not execute query."
+            ret = apr_dbd_pquery(db_conn->driver, db_conn->pool, db_conn->handle, &nr_rows, db_statement, argc, (const char **)argv),
+            HTTP_BAD_GATEWAY, "%s", apr_dbd_error(db_conn->driver, db_conn->handle, ret)
         )
+
         if (nr_rows < 1) {
-            ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] query modified zero rows.");
+            ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "query modified zero rows.");
             return HTTP_NOT_FOUND;
         }
     }

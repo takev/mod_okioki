@@ -61,7 +61,7 @@ void mod_okioki_urldecode(char *out, const char *in)
     out[j] = 0;
 }
 
-int mod_okioki_parse_query_phrase(request_rec *http_req, apr_hash_t *arguments, char *s)
+int mod_okioki_parse_query_phrase(request_rec *http_req, apr_hash_t *arguments, char *s, char **error)
 {
     apr_pool_t *pool = http_req->pool;
     char *last;
@@ -95,7 +95,7 @@ int mod_okioki_parse_query_phrase(request_rec *http_req, apr_hash_t *arguments, 
     return HTTP_OK;
 }
 
-int mod_okioki_parse_query(request_rec *http_req, apr_hash_t *arguments, char *_s)
+int mod_okioki_parse_query(request_rec *http_req, apr_hash_t *arguments, char *_s, char **error)
 {
     apr_pool_t *pool = http_req->pool;
     char *s;
@@ -119,7 +119,7 @@ int mod_okioki_parse_query(request_rec *http_req, apr_hash_t *arguments, char *_
     while (phrase) {
         // Parse the phrase.
         ASSERT_HTTP_OK(
-            ret = mod_okioki_parse_query_phrase(http_req, arguments, phrase),
+            ret = mod_okioki_parse_query_phrase(http_req, arguments, phrase, error),
             ret, "[mod_okioki] Could not parse query."
         )
         phrase = apr_strtok(NULL, "&", &last);

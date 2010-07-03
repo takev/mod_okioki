@@ -22,8 +22,8 @@
 #include <apr_hash.h>
 
 void mod_okioki_urldecode(char *out, const char *in);
-int mod_okioki_parse_query_phrase(request_rec *http_req, apr_hash_t *arguments, char *s);
-int mod_okioki_parse_query(request_rec *http_req, apr_hash_t *arguments, char *_s);
+int mod_okioki_parse_query_phrase(request_rec *http_req, apr_hash_t *arguments, char *s, char **error);
+int mod_okioki_parse_query(request_rec *http_req, apr_hash_t *arguments, char *_s, char **error);
 
 
 #endif

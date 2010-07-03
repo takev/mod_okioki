@@ -19,6 +19,7 @@
 
 #include <apr.h>
 #include <apr_hash.h>
+#include <apr_strings.h>
 
 #define MAX_PARAMETERS 32
 #define MAX_VIEWS 200
@@ -28,31 +29,36 @@
 
 #define ASSERT_NOT_NULL(expr, http_code, msg...) \
     if (__builtin_expect((expr) == NULL, 0)) { \
-        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, msg); \
+        *error = apr_psprintf(pool, msg); \
+        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] " msg); \
         return http_code; \
     }
 
 #define ASSERT_HTTP_OK(expr, http_code, msg...) \
     if (__builtin_expect((expr) != HTTP_OK, 0)) { \
-        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, msg); \
+        *error = apr_psprintf(pool, msg); \
+        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] " msg); \
         return http_code; \
     }
 
 #define ASSERT_APR_SUCCESS(expr, http_code, msg...) \
     if (__builtin_expect((expr) != APR_SUCCESS, 0)) { \
-        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, msg); \
+        *error = apr_psprintf(pool, msg); \
+        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] " msg); \
         return http_code; \
     }
 
 #define ASSERT_POSITIVE(expr, http_code, msg...) \
     if (__builtin_expect((expr) < 0, 0)) { \
-        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, msg); \
+        *error = apr_psprintf(pool, msg); \
+        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] " msg); \
         return http_code; \
     }
 
 #define ASSERT_ZERO(expr, http_code, msg...) \
     if (__builtin_expect((expr) != 0, 0)) { \
-        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, msg); \
+        *error = apr_psprintf(pool, msg); \
+        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "[mod_okioki] " msg); \
         return http_code; \
     }
 
@@ -69,10 +75,7 @@ typedef struct {
 
 typedef struct {
     // Views.
-    apr_hash_t *get_views;
-    apr_hash_t *post_views;
-    apr_hash_t *put_views;
-    apr_hash_t *delete_views;
+    apr_hash_t *views;
 } mod_okioki_dir_config;
 
 #endif
