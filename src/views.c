@@ -33,7 +33,6 @@ int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cf
     apr_pool_t         *pool = http_request->pool;
     ap_dbd_t           *db_conn;
     apr_dbd_prepared_t *db_statement;
-    int                have_result = (http_request->method_number == M_GET) | (http_request->method_number == M_POST);
     char               *arg;
     int                argc = view->nr_sql_params;
     char               *argv[argc + 1];
@@ -67,31 +66,20 @@ int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cf
 
     // Execute the statement.
     *db_result = NULL;
-    if (have_result) {
-        // Execute a select statement. We allow random access here as it allows easier configuration because the number
-        // of columns and the name of the columns are known when random access is enabled.
-        // Also because we use buckets and brigades everything is done in memory already, so streaming data would not
-        // have worked anyway.
-        ASSERT_APR_SUCCESS(
-            ret = apr_dbd_pselect(db_conn->driver, db_conn->pool, db_conn->handle, db_result, db_statement, 1, argc, (const char **)argv),
-            HTTP_BAD_GATEWAY, "%s", apr_dbd_error(db_conn->driver, db_conn->handle, ret)
-        )
 
-        ASSERT_NOT_NULL(
-            *db_result,
-            HTTP_BAD_GATEWAY, "Result was not set by apr_dbd_pselect."
-        )
-    } else {
-        ASSERT_APR_SUCCESS(
-            ret = apr_dbd_pquery(db_conn->driver, db_conn->pool, db_conn->handle, &nr_rows, db_statement, argc, (const char **)argv),
-            HTTP_BAD_GATEWAY, "%s", apr_dbd_error(db_conn->driver, db_conn->handle, ret)
-        )
+    // Execute a select statement. We allow random access here as it allows easier configuration because the number
+    // of columns and the name of the columns are known when random access is enabled.
+    // Also because we use buckets and brigades everything is done in memory already, so streaming data would not
+    // have worked anyway.
+    ASSERT_APR_SUCCESS(
+        ret = apr_dbd_pselect(db_conn->driver, db_conn->pool, db_conn->handle, db_result, db_statement, 1, argc, (const char **)argv),
+        HTTP_BAD_GATEWAY, "%s", apr_dbd_error(db_conn->driver, db_conn->handle, ret)
+    )
 
-        if (nr_rows < 1) {
-            ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "query modified zero rows.");
-            return HTTP_NOT_FOUND;
-        }
-    }
+    ASSERT_NOT_NULL(
+        *db_result,
+        HTTP_BAD_GATEWAY, "Result was not set by apr_dbd_pselect."
+    )
     return HTTP_OK;
 }
 
