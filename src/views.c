@@ -37,7 +37,6 @@ int mod_okioki_view_execute(request_rec *http_request, mod_okioki_dir_config *cf
     int                argc = view->nr_sql_params;
     char               *argv[argc + 1];
     off_t              i;
-    int                nr_rows;
     int                ret;
 
     // Copy the pointers parameters in the right order for the SQL statement.

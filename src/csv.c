@@ -25,7 +25,7 @@
 #include <apr_dbd.h>
 #include "csv.h"
 
-int mod_okioki_buffer_append_value(apr_bucket_brigade *bb, apr_pool_t *pool, apr_bucket_alloc_t *alloc, const char *s, char **error)
+int mod_okioki_csv_append_value(apr_bucket_brigade *bb, apr_pool_t *pool, apr_bucket_alloc_t *alloc, const char *s, char **error)
 {
     int i, j;
     int need_quote = 0;
@@ -127,7 +127,7 @@ int mod_okioki_generate_csv(request_rec *http_request, apr_pool_t *pool, apr_buc
         )
 
         ASSERT_HTTP_OK(
-            mod_okioki_buffer_append_value(bb, pool, alloc, name, error),
+            mod_okioki_csv_append_value(bb, pool, alloc, name, error),
             HTTP_INTERNAL_SERVER_ERROR, "Not enough room to store CSV result."
         )
     }
@@ -167,7 +167,7 @@ int mod_okioki_generate_csv(request_rec *http_request, apr_pool_t *pool, apr_buc
             )
 
             ASSERT_HTTP_OK(
-                mod_okioki_buffer_append_value(bb, pool, alloc, value, error),
+                mod_okioki_csv_append_value(bb, pool, alloc, value, error),
                 HTTP_INTERNAL_SERVER_ERROR, "Not enough room to store CSV result."
             )
         }

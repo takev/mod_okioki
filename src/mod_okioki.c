@@ -32,6 +32,7 @@
 #include "views.h"
 #include "urlencoding.h"
 #include "csv.h"
+#include "json.h"
 #include "util.h"
 
 module AP_MODULE_DECLARE_DATA okioki_module;
@@ -56,6 +57,11 @@ static void *mod_okioki_create_dir_config(apr_pool_t *pool, char *dir)
 
     if ((new_cfg->views = apr_hash_make(pool)) == NULL) {
         ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "Failed to allocate views hash table.");
+        return NULL;
+    }
+
+    if ((new_cfg->result_strings = apr_hash_make(pool)) == NULL) {
+        ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool, "Failed to allocate result_strings hash table.");
         return NULL;
     }
 
@@ -324,12 +330,19 @@ static int mod_okioki_handler(request_rec *http_request)
         return mod_okioki_generate_error(http_request, bucket_pool, bucket_alloc, ret, error);
     }
 
-    // Convert result to csv string.
     if (db_result != NULL) {
-        return mod_okioki_generate_csv(http_request, bucket_pool, bucket_alloc, db_driver, db_result, error);
+        switch (view->output_type) {
+        case O_CSV:
+            return mod_okioki_generate_csv(http_request, bucket_pool, bucket_alloc, db_driver, db_result, error);
+        case O_JSON:
+            return mod_okioki_generate_json(http_request, bucket_pool, bucket_alloc, db_driver, db_result, view->result_strings, error);
+        }
     } else {
         return mod_okioki_generate_empty(http_request, bucket_pool, bucket_alloc, error);
     }
+
+    /* NOTREACHED */
+    return HTTP_INTERNAL_SERVER_ERROR;
 }
 
 /** This function setups all the handlers at startup.
@@ -371,8 +384,10 @@ const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc,
 
     if (strcmp(argv[2], "CSV") == 0) {
         view->output_type = O_CSV;
+    } else if (strcmp(argv[2], "JSON") == 0) {
+        view->output_type = O_JSON;
     } else {
-        return "[OkiokiSetCommand] Third argument must be CSV";
+        return "[OkiokiSetCommand] Third argument must be CSV or JSON";
     }
 
     if ((view->sql = apr_pstrdup(pool, argv[3])) == NULL) {
@@ -397,6 +412,33 @@ const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc,
         }
     }
 
+    // Copy the result strings, multiple views can use the same result strings.
+    view->result_strings = conf->result_strings;
+
+    return NULL;
+}
+
+const char *mod_okioki_dircfg_result_strings(cmd_parms *cmd, void *_conf, int argc, char *const argv[])
+{
+    apr_pool_t            *pool      = cmd->pool;
+    mod_okioki_dir_config *conf      = (mod_okioki_dir_config *)_conf;
+    char                  *param;
+    int                   i;
+
+    if ((conf->result_strings = apr_hash_make(pool)) == NULL) {
+        return "Failed to allocate result_strings hash table.";
+    }
+
+    for (i = 0; i < argc; i++) {
+        if ((param = apr_pstrdup(pool, argv[i])) == NULL) {
+            return "Failed to allocate parameter.";
+        }
+
+        // Add the parameter to the hash table, we are using the hash table as a set, so we use the
+        // hash table itself as value.
+        apr_hash_set(conf->result_strings, param, APR_HASH_KEY_STRING, conf->result_strings);
+    }
+
     return NULL;
 }
 
@@ -404,11 +446,18 @@ const char *mod_okioki_dircfg_set_command(cmd_parms *cmd, void *_conf, int argc,
  */
 static const command_rec mod_okioki_cmds[] = {
     AP_INIT_TAKE_ARGV(
+        "OkiokiResultStrings",
+        mod_okioki_dircfg_result_strings,
+        NULL,
+        OR_AUTHCFG,
+        "OkiokiResultStrings [<params>[ <params>]...]"
+    ),
+    AP_INIT_TAKE_ARGV(
         "OkiokiCommand",
         mod_okioki_dircfg_set_command,
         NULL,
         OR_AUTHCFG,
-        "OkiokiCommand GET|POST|PUT|DELETE <path> CSV <prepared sql> [<params>[ <params>]...]"
+        "OkiokiCommand GET|POST|PUT|DELETE <path> CSV|JSON <prepared sql> [<params>[ <params>]...]"
     ),
     {NULL}
 };

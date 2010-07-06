@@ -62,20 +62,25 @@
         return http_code; \
     }
 
-#define O_CSV      1
+typedef enum {
+    O_CSV,
+    O_JSON
+} output_type_t;
 
 typedef struct {
-    char    *sql;
-    size_t  sql_len;
-    size_t  nr_sql_params;
-    char    *sql_params[MAX_PARAMETERS];
-    size_t  sql_params_len[MAX_PARAMETERS];
-    int     output_type;
+    char           *sql;
+    size_t         sql_len;
+    size_t         nr_sql_params;
+    char           *sql_params[MAX_PARAMETERS];
+    size_t         sql_params_len[MAX_PARAMETERS];
+    output_type_t  output_type;
+    apr_hash_t     *result_strings;
 } view_t;
 
 typedef struct {
     // Views.
     apr_hash_t *views;
+    apr_hash_t *result_strings;
 } mod_okioki_dir_config;
 
 #endif
