@@ -169,7 +169,10 @@ static int mod_okioki_input_handler(request_rec *http_request, apr_hash_t **_arg
     char                    *data;
     size_t                  data_size;
     int                     ret;
-    const char              *content_type;
+    const char              *_content_type;
+    char                    *content_type;
+    char                    *charset;
+    char                    *last_token;
 
     // Create arguments hash table. Then pass these arguments back to the caller.
     ASSERT_NOT_NULL(
@@ -194,9 +197,19 @@ static int mod_okioki_input_handler(request_rec *http_request, apr_hash_t **_arg
 
         // Check for the content-type of the request.
         ASSERT_NOT_NULL(
-            content_type = apr_table_get(http_request->headers_in, "Content-type"),
+            _content_type = apr_table_get(http_request->headers_in, "Content-type"),
             HTTP_BAD_REQUEST, "[mod_okioki.c] No content-type for PUT or POST."
         )
+
+        ASSERT_NOT_NULL(
+            content_type = apr_pstrdup(pool, _content_type),
+            HTTP_INTERNAL_SERVER_ERROR, "Could not allocate content-type"
+        )
+
+        // Get the content_type from the content_type string.
+        content_type = apr_strtok(content_type, ";", &last_token);
+        // Get the charset from the content_type string.
+        charset = apr_strtok(NULL, ";", &last_token);
 
         if (strcmp(content_type, "application/x-www-form-urlencoded") == 0) {
             ASSERT_HTTP_OK(
